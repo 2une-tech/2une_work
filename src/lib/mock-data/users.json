@@ -1,0 +1,12 @@
+[
+  {
+    "id": "user-1",
+    "name": "Jane Developer",
+    "email": "jane@example.com",
+    "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=Jane",
+    "skills": ["React", "TypeScript", "Node.js", "GraphQL"],
+    "experience": "4 years of full-stack development experience specializing in React ecosystems.",
+    "bio": "Passionate developer looking for an exciting role in AI or modern web technologies.",
+    "resumeFileName": "Jane_Developer_Resume.pdf"
+  }
+]
