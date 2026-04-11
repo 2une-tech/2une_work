@@ -8,7 +8,7 @@ import type { NextConfig } from 'next';
  * Production (e.g. Azure Static Web Apps): API_PROXY_TARGET must be set in the CI environment when
  * `next build` runs, or these rewrites point at localhost in the built output.
  */
-const API_ORIGIN = (process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
+const API_ORIGIN = (process.env.API_PROXY_TARGET ?? 'http://api.2une.in').replace(/\/$/, '');
 
 const nextConfig: NextConfig = {
   async rewrites() {
