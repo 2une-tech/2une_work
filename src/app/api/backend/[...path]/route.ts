@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 function upstreamOrigin(): string {
   return (
-    process.env.API_PROXY_TARGET ?? process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:3000'
+    process.env.API_PROXY_TARGET ?? process.env.API_INTERNAL_URL ?? 'http://api.2une.in'
   ).replace(/\/$/, '');
 }
 
