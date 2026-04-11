@@ -1,15 +1,15 @@
 'use client';
 
 import { FirebaseError } from 'firebase/app';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { api, PENDING_FULL_NAME_KEY } from '@/lib/services/api';
+import { api, ApiRequestError, PENDING_FULL_NAME_KEY } from '@/lib/services/api';
 import { useAuthStore } from '@/lib/store';
-import { signInWithGoogleAndGetIdToken } from '@/lib/firebaseClient';
+import { consumeGoogleRedirectIdToken, signInWithGoogleRedirect } from '@/lib/firebaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,12 +17,42 @@ import { Label } from '@/components/ui/label';
 import { AuthBrand } from '@/components/AuthBrand';
 
 export default function SignupPage() {
-  const { loginWithGoogle } = useAuthStore();
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const redirectConsumeStarted = useRef(false);
+
+  useEffect(() => {
+    if (redirectConsumeStarted.current) return;
+    redirectConsumeStarted.current = true;
+
+    void (async () => {
+      try {
+        const idToken = await consumeGoogleRedirectIdToken();
+        if (!idToken) {
+          redirectConsumeStarted.current = false;
+          return;
+        }
+        setLoading(true);
+        await useAuthStore.getState().loginWithGoogle(idToken);
+        toast.success('Signed in with Google.');
+        router.push('/dashboard');
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.code === 'INVALID_FIREBASE_TOKEN') {
+          toast.error(
+            'Google sign-in could not be verified on the server. Ensure the API has FIREBASE_SERVICE_ACCOUNT_JSON for the same Firebase project as this app.',
+          );
+        } else {
+          toast.error(err instanceof Error ? err.message : 'Google sign-up failed');
+        }
+      } finally {
+        setLoading(false);
+        redirectConsumeStarted.current = false;
+      }
+    })();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,18 +78,14 @@ export default function SignupPage() {
       if (name.trim() && typeof window !== 'undefined') {
         sessionStorage.setItem(PENDING_FULL_NAME_KEY, name.trim());
       }
-      const idToken = await signInWithGoogleAndGetIdToken();
-      await loginWithGoogle(idToken);
-      toast.success('Signed in with Google.');
-      router.push('/dashboard');
+      await signInWithGoogleRedirect();
     } catch (err) {
+      setLoading(false);
       if (err instanceof FirebaseError && err.code === 'auth/popup-closed-by-user') {
         toast.message('Sign-in cancelled.');
         return;
       }
       toast.error(err instanceof Error ? err.message : 'Google sign-up failed');
-    } finally {
-      setLoading(false);
     }
   };
 

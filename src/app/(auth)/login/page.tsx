@@ -1,6 +1,7 @@
 'use client';
 
 import { FirebaseError } from 'firebase/app';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -8,20 +9,51 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { ApiRequestError } from '@/lib/services/api';
-import { signInWithGoogleAndGetIdToken } from '@/lib/firebaseClient';
+import { consumeGoogleRedirectIdToken, signInWithGoogleRedirect } from '@/lib/firebaseClient';
 import { AuthBrand } from '@/components/AuthBrand';
 
 export default function LoginPage() {
-  const { login, loginWithGoogle } = useAuthStore();
+  const { login } = useAuthStore();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  /** Avoid duplicate getRedirectResult under React Strict Mode (second mount must not run). */
+  const redirectConsumeStarted = useRef(false);
+
+  useEffect(() => {
+    if (redirectConsumeStarted.current) return;
+    redirectConsumeStarted.current = true;
+
+    void (async () => {
+      try {
+        const idToken = await consumeGoogleRedirectIdToken();
+        if (!idToken) {
+          redirectConsumeStarted.current = false;
+          return;
+        }
+        setLoading(true);
+        await useAuthStore.getState().loginWithGoogle(idToken);
+        toast.success('Logged in successfully.');
+        router.push('/dashboard');
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.code === 'INVALID_FIREBASE_TOKEN') {
+          toast.error(
+            'Google sign-in could not be verified on the server. Ensure the API has FIREBASE_SERVICE_ACCOUNT_JSON for the same Firebase project as this app.',
+          );
+        } else {
+          toast.error(err instanceof Error ? err.message : 'Google sign-in failed');
+        }
+      } finally {
+        setLoading(false);
+        redirectConsumeStarted.current = false;
+      }
+    })();
+  }, [router]);
 
   const runLogin = async () => {
     if (!email.trim()) {
@@ -61,18 +93,14 @@ export default function LoginPage() {
   const runGoogleSignIn = async () => {
     setLoading(true);
     try {
-      const idToken = await signInWithGoogleAndGetIdToken();
-      await loginWithGoogle(idToken);
-      toast.success('Logged in successfully.');
-      router.push('/dashboard');
+      await signInWithGoogleRedirect();
     } catch (err) {
+      setLoading(false);
       if (err instanceof FirebaseError && err.code === 'auth/popup-closed-by-user') {
         toast.message('Sign-in cancelled.');
         return;
       }
       toast.error(err instanceof Error ? err.message : 'Google sign-in failed');
-    } finally {
-      setLoading(false);
     }
   };
 

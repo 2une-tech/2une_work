@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp, type FirebaseOptions } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, getRedirectResult, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
 
 function readFirebaseOptions(): FirebaseOptions {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
@@ -42,9 +42,20 @@ export function getFirebaseAuth() {
   return getAuth(getFirebaseApp());
 }
 
-export async function signInWithGoogleAndGetIdToken(): Promise<string> {
+/**
+ * Full-page redirect (recommended for production). Avoids popup + Cross-Origin-Opener-Policy issues on hosts
+ * that set strict COOP (Azure SWA, some CDNs).
+ */
+export async function signInWithGoogleRedirect(): Promise<void> {
   const auth = getFirebaseAuth();
   const provider = new GoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
+  await signInWithRedirect(auth, provider);
+}
+
+/** After returning from Google OAuth, call once; returns an ID token or null if this was not a redirect return. */
+export async function consumeGoogleRedirectIdToken(): Promise<string | null> {
+  const auth = getFirebaseAuth();
+  const result = await getRedirectResult(auth);
+  if (!result?.user) return null;
   return result.user.getIdToken();
 }
