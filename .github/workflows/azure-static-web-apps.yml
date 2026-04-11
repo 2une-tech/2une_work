@@ -39,9 +39,9 @@ jobs:
           output_location: ''
         env:
           # Build-time: required for next.config rewrites() and for inlining into the client bundle.
-          API_PROXY_TARGET: ${{ secrets.API_PROXY_TARGET }}
-          # Optional: browser calls API directly (different origin); must be https URL in production.
-          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          API_PROXY_TARGET: https://api.2une.in
+          # Optional: browser calls API directly (different origin); CORS on api.2une.in must allow the work app origin.
+          NEXT_PUBLIC_API_BASE_URL: https://api.2une.in
           NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
