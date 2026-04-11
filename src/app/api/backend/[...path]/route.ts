@@ -4,10 +4,15 @@ import { NextRequest, NextResponse } from 'next/server';
  * Server-side proxy to the Express API. The browser always calls same-origin
  * `/api/backend/auth/...`, `/api/backend/users/...`, etc., so requests never hit
  * the Next page server by mistake (fixes 404 when Next and API share confusion on :3000).
+ *
+ * Resolve upstream on each request so Azure Static Web Apps "Environment variables"
+ * (runtime) are picked up; a module-level const would freeze the first value per instance.
  */
-const UPSTREAM = (
-  process.env.API_PROXY_TARGET ?? process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:3000'
-).replace(/\/$/, '');
+function upstreamOrigin(): string {
+  return (
+    process.env.API_PROXY_TARGET ?? process.env.API_INTERNAL_URL ?? 'http://api.2une.in'
+  ).replace(/\/$/, '');
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,7 +49,7 @@ function filterResponseHeaders(incoming: Headers): Headers {
 
 async function proxy(req: NextRequest, pathSegments: string[]) {
   const path = pathSegments.length ? `/${pathSegments.join('/')}` : '';
-  const target = `${UPSTREAM}${path}${req.nextUrl.search}`;
+  const target = `${upstreamOrigin()}${path}${req.nextUrl.search}`;
 
   const hasBody = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
   const body = hasBody ? await req.arrayBuffer() : undefined;
