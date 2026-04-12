@@ -345,7 +345,7 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
       <h1 className="text-xl font-semibold tracking-tight text-foreground">Profile</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Complete your profile to apply to projects and receive tasks.
+        Keep your profile up to date to get matched with the right tasks.
       </p>
 
       <div className="mt-6 md:hidden">

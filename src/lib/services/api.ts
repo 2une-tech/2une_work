@@ -444,6 +444,35 @@ export const api = {
     }
   },
 
+  /** Current user's application for this project, or null if none. */
+  async getProjectApplicationStatus(projectId: string): Promise<{
+    id: string;
+    status: Application['status'];
+    interviewScore?: number | null;
+    rejectionReason?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null> {
+    try {
+      return await apiRequest<{
+        id: string;
+        status: Application['status'];
+        interviewScore?: number | null;
+        rejectionReason?: string | null;
+        createdAt: string;
+        updatedAt: string;
+      }>(`/projects/${projectId}/application-status`, { auth: true });
+    } catch (e) {
+      if (
+        e instanceof ApiRequestError &&
+        (e.status === 404 || e.code === 'APPLICATION_NOT_FOUND')
+      ) {
+        return null;
+      }
+      throw e;
+    }
+  },
+
   async applyToJob(jobId: string, _userId: string): Promise<Application> {
     try {
       const row = await apiRequest<{
@@ -482,6 +511,7 @@ export const api = {
     return apps.map(mapApplication);
   },
 
+  // Not used while `AI_INTERVIEW_ENABLED` is false in `@/lib/featureFlags` (interview UI is paused).
   async startAiInterview(applicationId: string): Promise<{
     applicationId: string;
     projectId: string;
@@ -490,6 +520,7 @@ export const api = {
     return apiRequest(`/applications/${applicationId}/ai-interview/start`, { method: 'POST', auth: true });
   },
 
+  // Not used while `AI_INTERVIEW_ENABLED` is false in `@/lib/featureFlags`.
   async submitAiInterview(
     applicationId: string,
     transcript: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
