@@ -7,6 +7,7 @@ interface AuthState {
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
+  loginWithLinkedinHandoff: (handoff: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   updateUser: (data: Partial<User>, opts?: { silent?: boolean }) => Promise<void>;
@@ -29,6 +30,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     try {
       const user = await api.loginWithGoogle(idToken);
+      set({ user, isLoading: false });
+    } catch (e) {
+      set({ isLoading: false });
+      throw e;
+    }
+  },
+  loginWithLinkedinHandoff: async (handoff) => {
+    set({ isLoading: true });
+    try {
+      const user = await api.loginWithLinkedinHandoff(handoff);
       set({ user, isLoading: false });
     } catch (e) {
       set({ isLoading: false });
@@ -62,7 +73,8 @@ interface JobState {
   searchQuery: string;
   categoryFilter: string;
   isLoading: boolean;
-  fetchJobs: () => Promise<void>;
+  /** Omit or pass `{}` for all active projects; `payType` filters server-side. */
+  fetchJobs: (filters?: { payType?: 'per_hour' | 'per_task' }) => Promise<void>;
   setSearchQuery: (query: string) => void;
   setCategoryFilter: (category: string) => void;
 }
@@ -72,10 +84,10 @@ export const useJobStore = create<JobState>((set) => ({
   searchQuery: '',
   categoryFilter: 'All',
   isLoading: false,
-  fetchJobs: async () => {
+  fetchJobs: async (filters) => {
     set({ isLoading: true });
     try {
-      const jobs = await api.getJobs();
+      const jobs = await api.getJobs(1, 50, filters);
       set({ jobs, isLoading: false });
     } catch (e) {
       console.error('[jobs]', e);

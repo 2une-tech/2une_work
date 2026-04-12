@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuthStore } from '@/lib/store';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import ChatUI from '@/components/ChatUI';
 import { api, ApiRequestError } from '@/lib/services/api';
@@ -11,7 +11,16 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { ErrorState } from '@/components/ErrorState';
 import { EmptyState } from '@/components/EmptyState';
-export default function InterviewPage({ params }: { params: { jobId: string } }) {
+function routeJobId(raw: ReturnType<typeof useParams>['jobId']): string {
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  if (Array.isArray(raw) && raw[0] && typeof raw[0] === 'string') return raw[0].trim();
+  return '';
+}
+
+export default function InterviewPage() {
+  const params = useParams();
+  const jobId = routeJobId(params.jobId);
+
   const { user } = useAuthStore();
   const router = useRouter();
   const [app, setApp] = useState<Application | null>(null);
@@ -26,6 +35,11 @@ export default function InterviewPage({ params }: { params: { jobId: string } })
       return;
     }
 
+    if (!jobId) {
+      setLoading(false);
+      return;
+    }
+
     const sessionUser = user;
 
     async function run() {
@@ -34,11 +48,11 @@ export default function InterviewPage({ params }: { params: { jobId: string } })
       setError(null);
       try {
         const applications = await api.getApplications();
-        let current = applications.find((a) => a.jobId === params.jobId && a.userId === uid);
+        let current = applications.find((a) => a.jobId === jobId && a.userId === uid);
 
         if (!current) {
           try {
-            current = await api.applyToJob(params.jobId, uid);
+            current = await api.applyToJob(jobId, uid);
           } catch (e) {
             if (e instanceof ApiRequestError && e.code === 'PROFILE_INCOMPLETE') {
               toast.error('Complete your profile before applying.');
@@ -74,7 +88,16 @@ export default function InterviewPage({ params }: { params: { jobId: string } })
     }
 
     void run();
-  }, [user, params.jobId, router]);
+  }, [user, jobId, router]);
+
+  if (!jobId) {
+    return (
+      <ErrorState
+        title="Invalid link"
+        description="This URL is missing a project id. Open the interview from a project listing again."
+      />
+    );
+  }
 
   if (loading || !app) {
     return (

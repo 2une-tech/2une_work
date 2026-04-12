@@ -10,20 +10,26 @@ import { Skeleton } from './ui/skeleton';
 
 export default function ApplicantTable() {
   const [apps, setApps] = useState<Application[]>([]);
-  const { jobs, fetchJobs } = useJobStore();
+  const jobs = useJobStore((s) => s.jobs);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadData() {
-      if (jobs.length === 0) await fetchJobs();
+      await useJobStore.getState().fetchJobs();
+      if (cancelled) return;
       const applications = await api.getApplications();
-      // Sort by AI score by default
       const sorted = applications.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
-      setApps(sorted);
-      setLoading(false);
+      if (!cancelled) {
+        setApps(sorted);
+        setLoading(false);
+      }
     }
-    loadData();
-  }, [jobs, fetchJobs]);
+    void loadData();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (loading) {
     return <div className="space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>;

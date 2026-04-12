@@ -8,6 +8,7 @@ import {
   Search,
   Home,
   DollarSign,
+  Wallet,
   User,
   LogOut,
   LogIn,
@@ -39,6 +40,7 @@ export default function Sidebar() {
         { name: 'Jobs', href: '/jobs', icon: Briefcase },
         { name: 'Tasks', href: '/tasks', icon: ClipboardList },
         { name: 'Earnings', href: '/earnings', icon: DollarSign },
+        { name: 'Payment', href: '/payment', icon: Wallet },
         { name: 'Profile', href: '/profile', icon: User },
       ]
     : [{ name: 'Explore', href: '/', icon: Search }];

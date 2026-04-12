@@ -3,12 +3,29 @@ export interface Job {
   title: string;
   company: string;
   payRange: string;
+  /** Mercor-style pay line for hero (e.g. `$0 – $65`). */
+  payHeadline: string;
+  /** e.g. `per hour` or `per task`. */
+  payUnitLine: string;
+  payType: 'per_hour' | 'per_task';
+  /** Numeric bounds backing payHeadline (same units as payType). */
+  payMin: number;
+  payMax: number;
+  contractLabel: string;
   tags: string[];
   shortDescription: string;
   description: string;
   category: string;
   experienceLevel: string;
   skillsRequired: string[];
+  /** Card footer left when set (overrides hire line and company). */
+  footerLeftText?: string | null;
+  /** Shown as “{n} hired this month” when > 0 and footerLeftText is empty. */
+  hiresThisMonth?: number | null;
+  /** Card footer right next to user-plus; defaults to payHeadline. */
+  footerRightText?: string | null;
+  /** Extra footer line (e.g. from API); defaults to domain via `category`. */
+  footerMetaText?: string | null;
 }
 
 export type UserRole = 'annotator' | 'admin' | 'qc';

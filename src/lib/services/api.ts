@@ -12,10 +12,12 @@ import {
   mergeProfileFromApi,
   workingDaysToApi,
 } from './profileMap';
+import { formatPayAmount } from '@/lib/utils';
 
 export { ApiRequestError };
 
 export const PENDING_FULL_NAME_KEY = '2une_pending_full_name';
+export const MINIMUM_PROFILE_MODAL_DISMISSED_KEY = '2une_minimum_modal_dismissed_session';
 
 function stripMarkdownToText(input: string): string {
   let s = input;
@@ -44,30 +46,97 @@ function stripMarkdownToText(input: string): string {
   return s;
 }
 
-function mapProjectToJob(p: {
+/** Active project row from `GET /projects` or `GET /projects/:id` (Prisma-shaped JSON). */
+export type ProjectApiPayload = {
   id: string;
   title: string;
   description?: string | null;
   domain: string;
   payPerTask: number;
+  payType?: string | null;
+  payMin: number;
+  payMax: number;
   requirement?: { requiredSkills?: string[] } | null;
-}): Job {
+  footerLeftText?: string | null;
+  hiresThisMonth?: number | null;
+  footerRightText?: string | null;
+  footerMetaText?: string | null;
+};
+
+function mapProjectToJob(p: ProjectApiPayload): Job {
   const skills = p.requirement?.requiredSkills ?? [];
-  const pay = p.payPerTask;
+  const payType: Job['payType'] = p.payType === 'per_hour' ? 'per_hour' : 'per_task';
+  const min = Number.isFinite(p.payMin) ? p.payMin : (p.payPerTask ?? 0);
+  const max = Number.isFinite(p.payMax) ? p.payMax : (p.payPerTask ?? min);
+  const unitWord = payType === 'per_hour' ? 'hour' : 'task';
+  const contractLabel: Job['contractLabel'] = payType === 'per_hour' ? 'Hourly contract' : 'Per-task contract';
+  const payHeadline =
+    min === max ? `$${formatPayAmount(min)}` : `$${formatPayAmount(min)} - $${formatPayAmount(max)}`;
+  const payUnitLine = `per ${unitWord}`;
+  const payRange = `${payHeadline} ${payUnitLine}`;
+
   const cleanDescription = p.description ? stripMarkdownToText(p.description) : '';
   return {
     id: p.id,
     title: p.title,
     company: '2une partner',
-    payRange: `$${pay} / task`,
+    payRange,
+    payHeadline,
+    payUnitLine,
+    payType,
+    payMin: min,
+    payMax: max,
+    contractLabel,
     tags: [p.domain, ...skills].filter(Boolean).slice(0, 8),
     shortDescription: ((cleanDescription || p.title).slice(0, 180) || p.title).trim(),
     description: p.description?.trim() || '',
     category: p.domain,
     experienceLevel: 'Annotator',
     skillsRequired: skills.length ? skills : [p.domain],
+    footerLeftText: p.footerLeftText ?? undefined,
+    hiresThisMonth: p.hiresThisMonth ?? undefined,
+    footerRightText: p.footerRightText ?? undefined,
+    footerMetaText: p.footerMetaText ?? undefined,
   };
 }
+
+/** Body item for `POST /admin/projects/bulk` (same shape as admin single create). */
+export type AdminBulkProjectInput = {
+  title: string;
+  description?: string;
+  domain: string;
+  status?: 'draft' | 'active' | 'paused' | 'completed';
+  payType?: 'per_task' | 'per_hour';
+  payMin?: number;
+  payMax?: number;
+  payPerTask?: number;
+  config: Record<string, unknown>;
+  requirement?: { minAccuracy: number; requiredSkills: string[]; languages: string[] };
+};
+
+export type AdminBulkCreateProjectsResponse = {
+  created: unknown[];
+  errors: { index: number; message: string }[];
+  results: Array<
+    | {
+        index: number;
+        ok: true;
+        project: {
+          id: string;
+          title: string;
+          domain: string;
+          status: string;
+          payType?: string;
+          payMin?: number;
+          payMax?: number;
+          payPerTask: number;
+        };
+      }
+    | { index: number; ok: false; message: string }
+  >;
+  totalRequested: number;
+  totalCreated: number;
+};
 
 function mapApplication(row: {
   id: string;
@@ -190,9 +259,34 @@ export const api = {
     return session;
   },
 
+  /** Sign-in / sign-up with LinkedIn (no session). Browser should navigate to `authorizationUrl`. */
+  async getLinkedinLoginOAuthUrl(): Promise<{ authorizationUrl: string }> {
+    return apiRequest('/auth/linkedin/url', { method: 'GET' });
+  },
+
+  /** Finish LinkedIn login after redirect (handoff JWT from URL `#linkedin_handoff=`). */
+  async loginWithLinkedinHandoff(handoff: string): Promise<User> {
+    const data = await apiRequest<{
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string; email: string; role: string };
+    }>('/auth/linkedin/handoff', {
+      method: 'POST',
+      body: { handoff: handoff.trim() },
+    });
+    setTokens(data.accessToken, data.refreshToken);
+    await flushPendingFullName();
+    const session = await this.getUserProfile();
+    if (!session) throw new Error('Login failed');
+    return session;
+  },
+
   async logout(): Promise<void> {
     clearTokens();
-    if (typeof window !== 'undefined') sessionStorage.removeItem(PENDING_FULL_NAME_KEY);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(PENDING_FULL_NAME_KEY);
+      sessionStorage.removeItem(MINIMUM_PROFILE_MODAL_DISMISSED_KEY);
+    }
   },
 
   /** Used for global “minimum profile” banner (phone + languages). */
@@ -217,6 +311,58 @@ export const api = {
     } catch {
       return null;
     }
+  },
+
+  /** Phone (max 40) and/or languages for minimum-profile completion (same shape as profile resume). */
+  async saveMinimumProfileDetails(input: {
+    phone?: string;
+    languages?: Array<{ language: string; speakLevel?: string; writeLevel?: string }>;
+  }): Promise<void> {
+    const phone = input.phone?.trim() ?? '';
+    const profValues = ['beginner', 'intermediate', 'advanced', 'fluent', 'native'] as const;
+    const profForPost = (v: string) => ((profValues as readonly string[]).includes(v) ? v : undefined);
+
+    if (phone) {
+      await apiRequest('/users/profile', {
+        method: 'PATCH',
+        auth: true,
+        body: { phone: phone.slice(0, 40) },
+      });
+    }
+    for (const row of input.languages ?? []) {
+      const language = row.language.trim().slice(0, 60);
+      if (!language) continue;
+      const body: { language: string; speakLevel?: string; writeLevel?: string } = { language };
+      const sp = profForPost(row.speakLevel?.trim() ?? '');
+      const wp = profForPost(row.writeLevel?.trim() ?? '');
+      if (sp) body.speakLevel = sp;
+      if (wp) body.writeLevel = wp;
+      await apiRequest('/users/profile/languages', {
+        method: 'POST',
+        auth: true,
+        body,
+      });
+    }
+  },
+
+  /** LinkedIn OpenID Connect: returns URL to redirect the browser to (user must be signed in). */
+  async getLinkedinOAuthUrl(): Promise<{ authorizationUrl: string }> {
+    return apiRequest('/users/profile/linkedin/oauth/url', { method: 'GET', auth: true });
+  },
+
+  /** Paste a public LinkedIn profile URL; backend validates and imports (mock parse today). */
+  async importLinkedinProfile(linkedinUrl: string): Promise<{
+    profile: {
+      linkedinUrl?: string | null;
+      linkedinConnected?: boolean | null;
+      linkedinParseStatus?: string | null;
+    };
+  }> {
+    return apiRequest('/users/profile/linkedin', {
+      method: 'POST',
+      auth: true,
+      body: { linkedinUrl: linkedinUrl.trim() },
+    });
   },
 
   async getUserProfile(): Promise<User | null> {
@@ -277,17 +423,20 @@ export const api = {
     };
   },
 
-  async getJobs(page = 1, limit = 50): Promise<Job[]> {
+  async getJobs(
+    page = 1,
+    limit = 50,
+    filters?: { payType?: 'per_hour' | 'per_task' },
+  ): Promise<Job[]> {
     const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
-    const data = await apiRequest<{ items: Parameters<typeof mapProjectToJob>[0][]; total: number }>(
-      `/projects?${qs}`,
-    );
+    if (filters?.payType) qs.set('payType', filters.payType);
+    const data = await apiRequest<{ items: ProjectApiPayload[]; total: number }>(`/projects?${qs}`);
     return data.items.map(mapProjectToJob);
   },
 
   async getJobById(id: string): Promise<Job | undefined> {
     try {
-      const p = await apiRequest<Parameters<typeof mapProjectToJob>[0]>(`/projects/${id}`);
+      const p = await apiRequest<ProjectApiPayload>(`/projects/${id}`);
       return mapProjectToJob(p);
     } catch (e) {
       if (e instanceof ApiRequestError && e.status === 404) return undefined;
@@ -793,5 +942,10 @@ export const api = {
       '/users/profile/completion-status',
       { auth: true },
     ).catch(() => null);
+  },
+
+  /** Admin: bulk create projects (same token as other authenticated admin calls). */
+  async adminBulkCreateProjects(projects: AdminBulkProjectInput[]): Promise<AdminBulkCreateProjectsResponse> {
+    return apiRequest('/admin/projects/bulk', { method: 'POST', auth: true, body: { projects } });
   },
 };
