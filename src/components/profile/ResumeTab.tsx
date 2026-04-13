@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import { CheckCircle2, Trash2, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/lib/services/api';
+import { api, ApiRequestError } from '@/lib/services/api';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +20,7 @@ import type {
   MockWorkerProfile,
 } from '@/types/profile';
 import { newId } from '@/types/profile';
-import { YEAR_OPTIONS } from './constants';
+import { PROFICIENCY_LEVELS, PROF_SELECT_NONE, YEAR_OPTIONS } from './constants';
 
 type Props = {
   profile: MockWorkerProfile;
@@ -62,16 +62,6 @@ const emptyLanguage = (): MockLanguageEntry => ({
   speakLevel: '',
   writeLevel: '',
 });
-
-const PROF_SELECT_NONE = 'none';
-
-const PROFICIENCY_LEVELS: { value: LanguageProficiencyLevel; label: string }[] = [
-  { value: 'beginner', label: 'Beginner' },
-  { value: 'intermediate', label: 'Intermediate' },
-  { value: 'advanced', label: 'Advanced' },
-  { value: 'fluent', label: 'Fluent' },
-  { value: 'native', label: 'Native' },
-];
 
 export function ResumeTab({ profile, setProfile, authEmail }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -273,26 +263,58 @@ export function ResumeTab({ profile, setProfile, authEmail }: Props) {
           {r.linkedinConnected ? (
             <>
               <p className="mb-2 text-[12px] text-muted-foreground">
-                Your LinkedIn account is connected. This URL comes from your connection and cannot be edited here.
+                {r.linkedinUrl?.trim()
+                  ? 'Your LinkedIn account is connected. This URL comes from your connection and cannot be edited here.'
+                  : 'Your LinkedIn account is connected with Sign in with LinkedIn. LinkedIn’s OpenID API does not include your public /in/ profile URL.'}
               </p>
-              <Input
-                readOnly
-                placeholder="https://linkedin.com/in/username"
-                value={r.linkedinUrl}
-                className="h-9 border-border bg-muted/30 text-[13px] text-muted-foreground"
-              />
+              {r.linkedinUrl?.trim() ? (
+                <Input
+                  readOnly
+                  placeholder="https://linkedin.com/in/username"
+                  value={r.linkedinUrl}
+                  className="h-9 border-border bg-muted/30 text-[13px] text-muted-foreground"
+                />
+              ) : (
+                <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[13px] text-muted-foreground">
+                  Profile URL not provided by LinkedIn for this connection.
+                </p>
+              )}
             </>
           ) : (
             <>
               <p className="mb-2 text-[12px] text-muted-foreground">
-                Your LinkedIn profile link is only available after you connect LinkedIn to 2une (or complete LinkedIn
-                import during onboarding).
+                Connect with LinkedIn while signed in to 2une — we only link that LinkedIn identity to your existing
+                account (we never create a second 2une user). Each LinkedIn account can link to at most one 2une
+                profile.
+              </p>
+              <p className="mb-2 text-[12px] text-muted-foreground">
+                LinkedIn’s OpenID API only shares basic identity (e.g. name, photo URL, email when allowed). It does not
+                fill work history, education, skills, or your full resume — you still enter those here. We only set your
+                display name from LinkedIn if it was still empty.
+              </p>
+              <p className="mb-2 text-[12px] text-muted-foreground">
+                During onboarding you can still paste a public profile URL for the separate import flow (demo data
+                today).
               </p>
               <Button
                 type="button"
                 variant="outline"
                 className="h-9 text-[13px] font-medium border-border bg-background"
-                onClick={() => toast.message('LinkedIn connect is coming soon.')}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const { authorizationUrl } = await api.getLinkedinOAuthUrl();
+                      window.location.assign(authorizationUrl);
+                    } catch (e) {
+                      if (e instanceof ApiRequestError && e.code === 'LINKEDIN_NOT_CONFIGURED') {
+                        toast.error('LinkedIn sign-in is not configured on the server yet.');
+                      } else {
+                        const msg = e instanceof Error ? e.message : 'Could not start LinkedIn sign-in.';
+                        toast.error(msg);
+                      }
+                    }
+                  })();
+                }}
               >
                 Connect LinkedIn
               </Button>

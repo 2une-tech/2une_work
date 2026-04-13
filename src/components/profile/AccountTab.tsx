@@ -1,5 +1,6 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 
@@ -7,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useAuthStore } from '@/lib/store';
+import { useHasProjectOffer } from '@/lib/useHasProjectOffer';
 import type { MockWorkerProfile } from '@/types/profile';
 
 type Props = {
@@ -16,6 +18,7 @@ type Props = {
 
 export function AccountTab({ profile, setProfile }: Props) {
   const { user, updateUser } = useAuthStore();
+  const { hasOffer, loading: offerLoading } = useHasProjectOffer();
   const fileRef = useRef<HTMLInputElement>(null);
   const acc = profile.account;
 
@@ -88,31 +91,47 @@ export function AccountTab({ profile, setProfile }: Props) {
       <div className="border-b border-border pb-10">
         <h3 className="text-[14px] font-bold text-foreground mb-1">Payout preferences</h3>
         <p className="text-[12px] text-muted-foreground mb-6">Choose how you want to receive your payouts - standard or instant.</p>
-        <div className="mb-4 rounded-lg border border-border bg-muted/30 p-4">
-          <h4 className="text-[13px] font-semibold text-foreground">Only one payout option available</h4>
-          <p className="text-[12px] text-muted-foreground">This option has been automatically selected for you.</p>
-        </div>
-        <div className="flex items-start gap-4 rounded-lg border border-border bg-muted/20 p-5">
-          <div className="mt-1">
-            <div className="flex h-4 w-4 items-center justify-center rounded-full border-4 border-primary bg-background">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-            </div>
+        {offerLoading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
           </div>
-          <div className="flex-1">
-            <div className="flex justify-between items-center mb-1">
-              <h4 className="text-[14px] font-bold text-foreground">Standard Payout</h4>
-              <span className="rounded-sm bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                Free
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-[12px] flex-wrap gap-2">
-              <p className="text-muted-foreground">
-                Funds arrive in your Stripe account quickly, then transfer to your bank within 5 business days
-              </p>
-              <span className="text-muted-foreground shrink-0">Up to 5 business days</span>
-            </div>
+        ) : !hasOffer ? (
+          <div className="rounded-lg border border-border bg-muted/30 p-4">
+            <h4 className="text-[13px] font-semibold text-foreground">Wait for an offer</h4>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Payout preferences and payment details are only available after a project offers you a role. Please wait until you
+              receive an offer to add payment details.
+            </p>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="mb-4 rounded-lg border border-border bg-muted/30 p-4">
+              <h4 className="text-[13px] font-semibold text-foreground">Only one payout option available</h4>
+              <p className="text-[12px] text-muted-foreground">This option has been automatically selected for you.</p>
+            </div>
+            <div className="flex items-start gap-4 rounded-lg border border-border bg-muted/20 p-5">
+              <div className="mt-1">
+                <div className="flex h-4 w-4 items-center justify-center rounded-full border-4 border-primary bg-background">
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-1">
+                  <h4 className="text-[14px] font-bold text-foreground">Standard Payout</h4>
+                  <span className="rounded-sm bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                    Free
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[12px] flex-wrap gap-2">
+                  <p className="text-muted-foreground">
+                    Funds arrive in your Stripe account quickly, then transfer to your bank within 5 business days
+                  </p>
+                  <span className="text-muted-foreground shrink-0">Up to 5 business days</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
       <div className="border-b border-border pb-10">
         <h3 className="text-[14px] font-bold text-foreground mb-1">Change email</h3>

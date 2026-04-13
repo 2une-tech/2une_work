@@ -1,27 +1,45 @@
 'use client';
 
 import { useAuthStore } from '@/lib/store';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import ChatUI from '@/components/ChatUI';
-import { api, ApiRequestError } from '@/lib/services/api';
+import { api } from '@/lib/services/api';
 import type { Application } from '@/types';
 import { Loader2, MessageSquareWarning } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { ErrorState } from '@/components/ErrorState';
 import { EmptyState } from '@/components/EmptyState';
-export default function InterviewPage({ params }: { params: { jobId: string } }) {
+import { AI_INTERVIEW_ENABLED } from '@/lib/featureFlags';
+
+function routeJobId(raw: ReturnType<typeof useParams>['jobId']): string {
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  if (Array.isArray(raw) && raw[0] && typeof raw[0] === 'string') return raw[0].trim();
+  return '';
+}
+
+export default function InterviewPage() {
+  const params = useParams();
+  const jobId = routeJobId(params.jobId);
+
   const { user } = useAuthStore();
   const router = useRouter();
   const [app, setApp] = useState<Application | null>(null);
   const [questions, setQuestions] = useState<{ id: string; question: string }[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(AI_INTERVIEW_ENABLED);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!AI_INTERVIEW_ENABLED) return;
+
     if (!user) {
       router.push('/login');
+      setLoading(false);
+      return;
+    }
+
+    if (!jobId) {
       setLoading(false);
       return;
     }
@@ -34,19 +52,10 @@ export default function InterviewPage({ params }: { params: { jobId: string } })
       setError(null);
       try {
         const applications = await api.getApplications();
-        let current = applications.find((a) => a.jobId === params.jobId && a.userId === uid);
+        let current = applications.find((a) => a.jobId === jobId && a.userId === uid);
 
         if (!current) {
-          try {
-            current = await api.applyToJob(params.jobId, uid);
-          } catch (e) {
-            if (e instanceof ApiRequestError && e.code === 'PROFILE_INCOMPLETE') {
-              toast.error('Complete your profile before applying.');
-              router.push('/profile');
-              return;
-            }
-            throw e;
-          }
+          current = await api.applyToJob(jobId, uid);
         }
 
         setApp(current);
@@ -74,7 +83,32 @@ export default function InterviewPage({ params }: { params: { jobId: string } })
     }
 
     void run();
-  }, [user, params.jobId, router]);
+  }, [user, jobId, router]);
+
+  if (!jobId) {
+    return (
+      <ErrorState
+        title="Invalid link"
+        description="This URL is missing a project id. Open the interview from a project listing again."
+      />
+    );
+  }
+
+  if (!AI_INTERVIEW_ENABLED) {
+    return (
+      <div className="mx-auto max-w-lg px-6 py-16 md:px-8">
+        <EmptyState
+          icon={<MessageSquareWarning className="h-6 w-6" />}
+          title="AI interview paused"
+          description="The AI interview step is temporarily turned off. Your application is still on file—check the dashboard for status."
+          actions={[
+            { label: 'Go to dashboard', href: '/dashboard', variant: 'default' },
+            { label: 'Browse projects', href: '/jobs', variant: 'outline' },
+          ]}
+        />
+      </div>
+    );
+  }
 
   if (loading || !app) {
     return (

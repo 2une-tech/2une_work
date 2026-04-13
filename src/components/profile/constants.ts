@@ -1,3 +1,16 @@
+import type { LanguageProficiencyLevel } from '@/types/profile';
+
+/** Select sentinel; keeps Base UI Select controlled (never pass `undefined` as value). */
+export const PROF_SELECT_NONE = 'none';
+
+export const PROFICIENCY_LEVELS: { value: Exclude<LanguageProficiencyLevel, ''>; label: string }[] = [
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' },
+  { value: 'fluent', label: 'Fluent' },
+  { value: 'native', label: 'Native' },
+];
+
 export const DOMAIN_OPTIONS = [
   { label: 'Software engineering', icon: '</>' },
   { label: 'Other engineering', icon: '⚙️' },

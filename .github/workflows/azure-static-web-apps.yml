@@ -38,10 +38,10 @@ jobs:
           api_location: ''
           output_location: ''
         env:
-          # Build-time: required for next.config rewrites() and for inlining into the client bundle.
+          # Build-time: next.config rewrites(); Azure Portal must also set API_PROXY_TARGET for the /api/backend proxy at runtime.
           API_PROXY_TARGET: https://api.2une.in
-          # Optional: browser calls API directly (different origin); CORS on api.2une.in must allow the work app origin.
-          NEXT_PUBLIC_API_BASE_URL: https://api.2une.in
+          # Do NOT set NEXT_PUBLIC_API_BASE_URL here: the browser would call api.2une.in directly and CORS must list
+          # every host (e.g. *.azurestaticapps.net). Same-origin /api/backend/* avoids that.
           NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}

@@ -1,6 +1,7 @@
 'use client';
 
 import { FirebaseError } from 'firebase/app';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -8,20 +9,88 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { ApiRequestError } from '@/lib/services/api';
-import { signInWithGoogleAndGetIdToken } from '@/lib/firebaseClient';
+import { api, ApiRequestError } from '@/lib/services/api';
+import { consumeGoogleRedirectIdToken, signInWithGoogleRedirect } from '@/lib/firebaseClient';
+import { consumeLinkedinHandoffFromHash, LINKEDIN_LOGIN_ERROR_MESSAGES } from '@/lib/linkedinOAuth';
 import { AuthBrand } from '@/components/AuthBrand';
 
 export default function LoginPage() {
-  const { login, loginWithGoogle } = useAuthStore();
+  const { login, loginWithLinkedinHandoff } = useAuthStore();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  /** Avoid duplicate getRedirectResult under React Strict Mode (second mount must not run). */
+  const redirectConsumeStarted = useRef(false);
+  const linkedinHandoffStarted = useRef(false);
+  const linkedinQueryErrorShown = useRef(false);
+
+  useEffect(() => {
+    if (redirectConsumeStarted.current) return;
+    redirectConsumeStarted.current = true;
+
+    void (async () => {
+      try {
+        const idToken = await consumeGoogleRedirectIdToken();
+        if (!idToken) {
+          redirectConsumeStarted.current = false;
+          return;
+        }
+        setLoading(true);
+        await useAuthStore.getState().loginWithGoogle(idToken);
+        toast.success('Logged in successfully.');
+        router.push('/dashboard');
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.code === 'INVALID_FIREBASE_TOKEN') {
+          toast.error(
+            'Google sign-in could not be verified on the server. Ensure the API has FIREBASE_SERVICE_ACCOUNT_JSON for the same Firebase project as this app.',
+          );
+        } else {
+          toast.error(err instanceof Error ? err.message : 'Google sign-in failed');
+        }
+      } finally {
+        setLoading(false);
+        redirectConsumeStarted.current = false;
+      }
+    })();
+  }, [router]);
+
+  useEffect(() => {
+    if (linkedinHandoffStarted.current) return;
+    const token = consumeLinkedinHandoffFromHash();
+    if (!token) return;
+    linkedinHandoffStarted.current = true;
+    void (async () => {
+      try {
+        setLoading(true);
+        await loginWithLinkedinHandoff(token);
+        toast.success('Logged in successfully.');
+        router.push('/dashboard');
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.code === 'INVALID_LINKEDIN_HANDOFF') {
+          toast.error('Sign-in session expired. Try LinkedIn again.');
+        } else {
+          toast.error(err instanceof Error ? err.message : 'LinkedIn sign-in failed');
+        }
+      } finally {
+        setLoading(false);
+        linkedinHandoffStarted.current = false;
+      }
+    })();
+  }, [router, loginWithLinkedinHandoff]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || linkedinQueryErrorShown.current) return;
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get('linkedin_error');
+    if (!err) return;
+    linkedinQueryErrorShown.current = true;
+    toast.error(LINKEDIN_LOGIN_ERROR_MESSAGES[err] ?? LINKEDIN_LOGIN_ERROR_MESSAGES.signin_failed);
+    router.replace('/login', { scroll: false });
+  }, [router]);
 
   const runLogin = async () => {
     if (!email.trim()) {
@@ -43,8 +112,11 @@ export default function LoginPage() {
         router.push('/verify-email');
         return;
       }
-      if (err instanceof ApiRequestError && err.code === 'USE_GOOGLE_LOGIN') {
-        toast.error('This account uses Google sign-in.');
+      if (
+        err instanceof ApiRequestError &&
+        (err.code === 'USE_GOOGLE_LOGIN' || err.code === 'USE_OAUTH_LOGIN')
+      ) {
+        toast.error('This account uses Google or LinkedIn sign-in.');
         return;
       }
       toast.error(err instanceof Error ? err.message : 'Login failed');
@@ -61,18 +133,29 @@ export default function LoginPage() {
   const runGoogleSignIn = async () => {
     setLoading(true);
     try {
-      const idToken = await signInWithGoogleAndGetIdToken();
-      await loginWithGoogle(idToken);
-      toast.success('Logged in successfully.');
-      router.push('/dashboard');
+      await signInWithGoogleRedirect();
     } catch (err) {
+      setLoading(false);
       if (err instanceof FirebaseError && err.code === 'auth/popup-closed-by-user') {
         toast.message('Sign-in cancelled.');
         return;
       }
       toast.error(err instanceof Error ? err.message : 'Google sign-in failed');
-    } finally {
+    }
+  };
+
+  const runLinkedinSignIn = async () => {
+    setLoading(true);
+    try {
+      const { authorizationUrl } = await api.getLinkedinLoginOAuthUrl();
+      window.location.assign(authorizationUrl);
+    } catch (err) {
       setLoading(false);
+      if (err instanceof ApiRequestError && err.code === 'LINKEDIN_NOT_CONFIGURED') {
+        toast.error('LinkedIn sign-in is not configured on the server yet.');
+        return;
+      }
+      toast.error(err instanceof Error ? err.message : 'LinkedIn sign-in failed');
     }
   };
 
@@ -166,20 +249,16 @@ export default function LoginPage() {
                 variant="outline"
                 type="button"
                 className="h-10 font-normal"
-                onClick={() => toast.info('Okta sign-in is not available yet.')}
+                onClick={() => void runLinkedinSignIn()}
                 disabled={loading}
               >
-                <svg className="mr-2 h-[18px] w-[18px]" viewBox="0 0 100 100" fill="none">
+                <svg className="mr-2 h-[18px] w-[18px]" viewBox="0 0 24 24" aria-hidden>
                   <path
-                    d="M50 0C22.4 0 0 22.4 0 50c0 27.6 22.4 50 50 50 27.6 0 50-22.4 50-50C100 22.4 77.6 0 50 0zm0 82.5c-17.9 0-32.5-14.6-32.5-32.5 0-17.9 14.6-32.5 32.5-32.5 17.9 0 32.5 14.6 32.5 32.5 0 17.9-14.6 32.5-32.5 32.5z"
-                    fill="currentColor"
-                  />
-                  <path
-                    d="M50 35c-8.3 0-15 6.7-15 15 0 8.3 6.7 15 15 15 8.3 0 15-6.7 15-15 0-8.3-6.7-15-15-15z"
-                    fill="currentColor"
+                    fill="#0A66C2"
+                    d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"
                   />
                 </svg>
-                Okta
+                LinkedIn
               </Button>
             </div>
           </form>

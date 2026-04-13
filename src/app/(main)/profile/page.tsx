@@ -54,9 +54,20 @@ const SECTIONS: {
   },
 ];
 
+const LINKEDIN_ERROR_MESSAGES: Record<string, string> = {
+  access_denied: 'LinkedIn sign-in was cancelled.',
+  oauth_denied: 'LinkedIn sign-in was denied.',
+  invalid_callback: 'LinkedIn sign-in failed (invalid callback).',
+  email_mismatch: 'Your LinkedIn email must match your 2une account email.',
+  account_in_use: 'That LinkedIn account is already linked to another user.',
+  invalid_state: 'LinkedIn sign-in expired. Please try again.',
+  linkedin_api_error: 'LinkedIn could not complete sign-in. Try again later.',
+  link_failed: 'Could not connect LinkedIn.',
+};
+
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, updateUser } = useAuthStore();
+  const { user, updateUser, checkAuth } = useAuthStore();
   const [activeSection, setActiveSection] = useState<ProfileUiSection>('about');
   const [profile, setProfile] = useState<MockWorkerProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,6 +99,32 @@ export default function ProfilePage() {
     fillSavedSnapshots(p);
     profileHydrated.current = true;
   }, [fillSavedSnapshots]);
+
+  const linkedinReturnHandled = useRef(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || linkedinReturnHandled.current) return;
+    const q = new URLSearchParams(window.location.search);
+    const connected = q.get('linkedin_connected');
+    const err = q.get('linkedin_error');
+    if (connected !== '1' && !err) return;
+    linkedinReturnHandled.current = true;
+
+    const path = window.location.pathname;
+
+    if (connected === '1') {
+      toast.success(
+        'LinkedIn connected to this account. Your name is updated from LinkedIn only if it was empty; other sections are unchanged.',
+      );
+      void (async () => {
+        await checkAuth();
+        await reloadFromStorage();
+      })();
+    } else if (err) {
+      toast.error(LINKEDIN_ERROR_MESSAGES[err] ?? LINKEDIN_ERROR_MESSAGES.link_failed);
+    }
+
+    router.replace(path, { scroll: false });
+  }, [checkAuth, reloadFromStorage, router]);
 
   const userId = user?.id;
 
@@ -308,7 +345,7 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
       <h1 className="text-xl font-semibold tracking-tight text-foreground">Profile</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Complete your profile to apply to projects and receive tasks.
+        Keep your profile up to date to get matched with the right tasks.
       </p>
 
       <div className="mt-6 md:hidden">
