@@ -1,58 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuthStore } from '@/lib/store';
-import { api } from '@/lib/services/api';
+import { api, ApiRequestError } from '@/lib/services/api';
 import { validateProfileTab } from '@/lib/profileValidation';
 import {
-  PROFILE_SECTION_AUTOSAVE_DEBOUNCE_MS,
-  getProfileSectionAutoSaveBlockers,
-  serializeProfileSection,
-} from '@/lib/profileSectionAutosave';
-import type { MockWorkerProfile, ProfileTabId, ProfileUiSection } from '@/types/profile';
+  getResumeAutoSaveBlockers,
+  serializeResumeForAutosave,
+  RESUME_AUTOSAVE_DEBOUNCE_MS,
+} from '@/lib/profileResumeAutosave';
+import type { MockWorkerProfile, ProfileTabId } from '@/types/profile';
 
 import { ProfileTabActions } from '@/components/profile/ProfileTabActions';
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { ResumeTab } from '@/components/profile/ResumeTab';
-import { LocationTab } from '@/components/profile/LocationTab';
-import { AvailabilityTab } from '@/components/profile/AvailabilityTab';
-import { WorkPreferencesTab } from '@/components/profile/WorkPreferencesTab';
 import { CommunicationsTab } from '@/components/profile/CommunicationsTab';
-import { AccountTab } from '@/components/profile/AccountTab';
-import { cn } from '@/lib/utils';
-
-const SECTIONS: {
-  id: ProfileUiSection;
-  label: string;
-  hint: string;
-  backendTabs: ProfileTabId[];
-  showAvailabilityDot?: boolean;
-}[] = [
-  { id: 'about', label: 'About', hint: 'Resume, experience, and skills.', backendTabs: ['Resume'] },
-  {
-    id: 'location',
-    label: 'Location',
-    hint: 'Where you live and where you are authorized to work.',
-    backendTabs: ['Location & Work authorization'],
-  },
-  {
-    id: 'schedule',
-    label: 'Schedule',
-    hint: 'When you are available and how you prefer to work.',
-    backendTabs: ['Availability', 'Work preferences'],
-    showAvailabilityDot: true,
-  },
-  {
-    id: 'account',
-    label: 'Account',
-    hint: 'Notifications, payout preferences, and account security.',
-    backendTabs: ['Communications', 'Account'],
-  },
-];
+import { AccountTab, DeleteAccountSection } from '@/components/profile/AccountTab';
 
 const LINKEDIN_ERROR_MESSAGES: Record<string, string> = {
   access_denied: 'LinkedIn sign-in was cancelled.',
@@ -67,8 +34,7 @@ const LINKEDIN_ERROR_MESSAGES: Record<string, string> = {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, updateUser, checkAuth } = useAuthStore();
-  const [activeSection, setActiveSection] = useState<ProfileUiSection>('about');
+  const { user, updateUser, checkAuth, authReady, isLoading: authSessionLoading } = useAuthStore();
   const [profile, setProfile] = useState<MockWorkerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,28 +43,20 @@ export default function ProfilePage() {
   const profileRef = useRef<MockWorkerProfile | null>(null);
   profileRef.current = profile;
 
-  const lastSavedBySection = useRef<Partial<Record<ProfileUiSection, string>>>({});
   const persistMutex = useRef(false);
+  const autosaveMutex = useRef(false);
   const profileHydrated = useRef(false);
-  const lastAutosaveBlocker = useRef<{ section: ProfileUiSection; msg: string; at: number } | null>(null);
-
-  const fillSavedSnapshots = useCallback((p: MockWorkerProfile) => {
-    lastSavedBySection.current = {
-      about: serializeProfileSection('about', p),
-      location: serializeProfileSection('location', p),
-      schedule: serializeProfileSection('schedule', p),
-      account: serializeProfileSection('account', p),
-    };
-  }, []);
+  const lastSavedResumeSerializedRef = useRef<string>('');
+  const resumeAutosaveTimerRef = useRef<number | null>(null);
 
   const reloadFromStorage = useCallback(async () => {
     const u = useAuthStore.getState().user;
     if (!u) return;
     const p = await api.getWorkerProfile(u.id, u);
     setProfile(p);
-    fillSavedSnapshots(p);
     profileHydrated.current = true;
-  }, [fillSavedSnapshots]);
+    lastSavedResumeSerializedRef.current = serializeResumeForAutosave(p);
+  }, []);
 
   const linkedinReturnHandled = useRef(false);
   useEffect(() => {
@@ -129,6 +87,7 @@ export default function ProfilePage() {
   const userId = user?.id;
 
   useEffect(() => {
+    if (!authReady || authSessionLoading) return;
     if (!userId) {
       router.replace('/login');
       return;
@@ -144,105 +103,89 @@ export default function ProfilePage() {
       const p = await api.getWorkerProfile(userId, u);
       if (!cancelled) {
         setProfile(p);
-        fillSavedSnapshots(p);
         profileHydrated.current = true;
+        lastSavedResumeSerializedRef.current = serializeResumeForAutosave(p);
         setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [userId, router, fillSavedSnapshots]);
+  }, [authReady, authSessionLoading, userId, router]);
 
   useEffect(() => {
     profileHydrated.current = false;
-    lastSavedBySection.current = {};
   }, [userId]);
 
+  // Autosave Resume (includes languages) after idle debounce.
   useEffect(() => {
-    if (!user || loading || !profile || !profileHydrated.current) return;
+    if (!user || !profile) return;
+    if (!profileHydrated.current) return;
+    if (saving) return;
 
-    const section = activeSection;
-    const timer = window.setTimeout(async () => {
-      const p = profileRef.current;
-      if (!p || !user || persistMutex.current) return;
+    const current = serializeResumeForAutosave(profile);
+    if (current === lastSavedResumeSerializedRef.current) return;
 
-      const serialized = serializeProfileSection(section, p);
-      if (serialized === lastSavedBySection.current[section]) return;
+    if (resumeAutosaveTimerRef.current != null) {
+      window.clearTimeout(resumeAutosaveTimerRef.current);
+    }
 
-      const blocker = getProfileSectionAutoSaveBlockers(section, p);
+    resumeAutosaveTimerRef.current = window.setTimeout(() => {
+      const pNow = profileRef.current;
+      if (!pNow) return;
+      if (!user) return;
+      if (persistMutex.current) return;
+      if (autosaveMutex.current) return;
+
+      const blocker = getResumeAutoSaveBlockers(pNow);
       if (blocker) {
-        const now = Date.now();
-        const prev = lastAutosaveBlocker.current;
-        const repeatSame =
-          prev && prev.section === section && prev.msg === blocker && now - prev.at < 10_000;
-        if (!repeatSame) {
-          lastAutosaveBlocker.current = { section, msg: blocker, at: now };
-          toast.message(blocker, { id: `profile-autosave-blocker-${section}`, duration: 5000 });
+        if (typeof console !== 'undefined' && console.info) {
+          console.info('[2une][profile] resume autosave blocked', { blocker });
         }
         return;
       }
-      lastAutosaveBlocker.current = null;
 
-      const tabs = SECTIONS.find((s) => s.id === section)!.backendTabs;
-
-      persistMutex.current = true;
+      autosaveMutex.current = true;
       setAutosaving(true);
-      try {
-        for (const tab of tabs) {
-          await api.saveWorkerProfile(user.id, p, tab);
-        }
-
-        if (tabs.includes('Resume')) {
-          const skills = p.resume.skills
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
-          await updateUser(
-            {
-              name: p.resume.fullName,
-              resumeFileName: p.resume.resumeFileName || undefined,
-              skills,
-            },
-            { silent: true },
-          );
-        }
-
-        const needsReload = tabs.includes('Resume') || tabs.includes('Availability');
-        if (needsReload) {
-          const u = useAuthStore.getState().user;
-          if (u) {
-            const fresh = await api.getWorkerProfile(u.id, u);
-            setProfile(fresh);
-            fillSavedSnapshots(fresh);
-          }
-        } else {
-          lastSavedBySection.current[section] = serialized;
-        }
-
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('2une-profile-saved'));
-        }
-        toast.success('Saved', { id: 'profile-autosave-ok', duration: 1400 });
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Autosave failed', { id: 'profile-autosave-err' });
-      } finally {
-        persistMutex.current = false;
-        setAutosaving(false);
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[2une][profile] resume autosave start');
       }
-    }, PROFILE_SECTION_AUTOSAVE_DEBOUNCE_MS);
+      void (async () => {
+        try {
+          await api.saveWorkerProfile(user.id, pNow, 'Resume');
+          const uAfter = useAuthStore.getState().user;
+          if (uAfter) {
+            const fresh = await api.getWorkerProfile(uAfter.id, uAfter);
+            setProfile(fresh);
+            lastSavedResumeSerializedRef.current = serializeResumeForAutosave(fresh);
+          } else {
+            lastSavedResumeSerializedRef.current = serializeResumeForAutosave(pNow);
+          }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('2une-profile-saved'));
+          }
+          if (typeof console !== 'undefined' && console.info) {
+            console.info('[2une][profile] resume autosave success');
+          }
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.warn) {
+            const msg = e instanceof ApiRequestError ? `${e.code} ${e.message}` : e instanceof Error ? e.message : String(e);
+            console.warn('[2une][profile] resume autosave failed', msg);
+          }
+        } finally {
+          autosaveMutex.current = false;
+          setAutosaving(false);
+        }
+      })();
+    }, RESUME_AUTOSAVE_DEBOUNCE_MS);
 
-    return () => window.clearTimeout(timer);
-  }, [profile, user, loading, activeSection, updateUser, fillSavedSnapshots]);
-
-  const sectionMeta = useMemo(
-    () => SECTIONS.find((s) => s.id === activeSection)!,
-    [activeSection]
-  );
-
-  const missingAvailability =
-    profile &&
-    (!profile.availability.timezone.trim() || !profile.availability.preferredWeeklyHours.trim());
+    return () => {
+      if (resumeAutosaveTimerRef.current != null) {
+        window.clearTimeout(resumeAutosaveTimerRef.current);
+        resumeAutosaveTimerRef.current = null;
+      }
+    };
+  }, [profile, saving, user]);
 
   const handleSave = async () => {
     if (!user || !profile) return;
@@ -250,7 +193,7 @@ export default function ProfilePage() {
       toast.message('Please wait for the save in progress to finish.');
       return;
     }
-    const tabs = sectionMeta.backendTabs;
+    const tabs: ProfileTabId[] = ['Resume', 'Communications', 'Account'];
 
     for (const tab of tabs) {
       const err = validateProfileTab(tab, profile);
@@ -260,21 +203,7 @@ export default function ProfilePage() {
       }
     }
 
-    let toSave = profile;
-    if (tabs.includes('Availability')) {
-      toSave = {
-        ...profile,
-        availability: {
-          ...profile.availability,
-          lastUpdatedLabel: new Date().toLocaleDateString(undefined, {
-            month: '2-digit',
-            day: '2-digit',
-            year: '2-digit',
-          }),
-        },
-      };
-      setProfile(toSave);
-    }
+    const toSave = profile;
 
     persistMutex.current = true;
     setSaving(true);
@@ -297,16 +226,11 @@ export default function ProfilePage() {
         );
       }
 
-      const needsReload = tabs.includes('Resume') || tabs.includes('Availability');
-      if (needsReload) {
-        const u = useAuthStore.getState().user;
-        if (u) {
-          const fresh = await api.getWorkerProfile(u.id, u);
-          setProfile(fresh);
-          fillSavedSnapshots(fresh);
-        }
-      } else {
-        fillSavedSnapshots(toSave);
+      const u = useAuthStore.getState().user;
+      if (u) {
+        const fresh = await api.getWorkerProfile(u.id, u);
+        setProfile(fresh);
+        lastSavedResumeSerializedRef.current = serializeResumeForAutosave(fresh);
       }
 
       if (typeof window !== 'undefined') {
@@ -333,7 +257,7 @@ export default function ProfilePage() {
     });
   }, []);
 
-  if (!user || loading || !profile) {
+  if (!authReady || authSessionLoading || !user || loading || !profile) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -348,107 +272,38 @@ export default function ProfilePage() {
         Keep your profile up to date to get matched with the right tasks.
       </p>
 
-      <div className="mt-6 md:hidden">
-        <label htmlFor="profile-section" className="sr-only">
-          Profile section
-        </label>
-        <select
-          id="profile-section"
-          value={activeSection}
-          onChange={(e) => setActiveSection(e.target.value as ProfileUiSection)}
-          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
-        >
-          {SECTIONS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="mt-8 min-w-0 max-w-2xl space-y-8">
+        <AccountTab profile={profile} setProfile={setProfileSafe} />
+        <ResumeTab profile={profile} setProfile={setProfileSafe} authEmail={user.email} />
 
-      <div className="mt-8 grid gap-10 md:grid-cols-[11rem_minmax(0,1fr)] lg:grid-cols-[12rem_minmax(0,1fr)]">
-        <nav className="hidden flex-col gap-1 md:flex" aria-label="Profile sections">
-          {SECTIONS.map((s) => {
-            const isActive = activeSection === s.id;
-            const showDot = s.showAvailabilityDot && missingAvailability;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setActiveSection(s.id)}
-                className={cn(
-                  'flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
-                )}
-              >
-                <span>{s.label}</span>
-                {showDot ? (
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-                ) : null}
-              </button>
-            );
-          })}
-        </nav>
+        <ProfileSection title="Notifications" description="Channels and types of updates.">
+          <CommunicationsTab profile={profile} setProfile={setProfileSafe} />
+        </ProfileSection>
+        {/*
+        <ProfileSection title="Account & payouts" description="Profile photo, payouts, email, and deletion.">
+          <AccountTab profile={profile} setProfile={setProfileSafe} />
+        </ProfileSection>
+        */}
 
-        <div className="min-w-0 max-w-2xl space-y-6">
-          <header>
-            <h2 className="text-sm font-semibold text-foreground">{sectionMeta.label}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{sectionMeta.hint}</p>
-            {activeSection === 'schedule' && missingAvailability ? (
-              <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <p className="font-medium">Availability incomplete</p>
-                <ul className="mt-1 list-inside list-disc text-xs">
-                  {!profile.availability.timezone.trim() && <li>Time zone</li>}
-                  {!profile.availability.preferredWeeklyHours.trim() && <li>Preferred weekly hours</li>}
-                </ul>
-              </div>
-            ) : null}
-          </header>
+        {/* Location + Schedule are commented out for now (per request). */}
+        {/*
+        <LocationTab profile={profile} setProfile={setProfileSafe} />
+        <ProfileSection title="Availability" description="Timezone, hours per week, and typical working hours.">
+          <AvailabilityTab profile={profile} setProfile={setProfileSafe} />
+        </ProfileSection>
+        <ProfileSection title="Work preferences" description="Domains and compensation expectations.">
+          <WorkPreferencesTab profile={profile} setProfile={setProfileSafe} />
+        </ProfileSection>
+        */}
 
-          <div className="space-y-8">
-            {activeSection === 'about' && (
-              <ResumeTab profile={profile} setProfile={setProfileSafe} authEmail={user.email} />
-            )}
-            {activeSection === 'location' && (
-              <LocationTab profile={profile} setProfile={setProfileSafe} />
-            )}
-            {activeSection === 'schedule' && (
-              <>
-                <ProfileSection
-                  title="Availability"
-                  description="Timezone, hours per week, and typical working hours."
-                >
-                  <AvailabilityTab profile={profile} setProfile={setProfileSafe} />
-                </ProfileSection>
-                <ProfileSection
-                  title="Work preferences"
-                  description="Domains and compensation expectations."
-                >
-                  <WorkPreferencesTab profile={profile} setProfile={setProfileSafe} />
-                </ProfileSection>
-              </>
-            )}
-            {activeSection === 'account' && (
-              <>
-                <ProfileSection title="Notifications" description="Channels and types of updates.">
-                  <CommunicationsTab profile={profile} setProfile={setProfileSafe} />
-                </ProfileSection>
-                <ProfileSection title="Account & payouts" description="Profile photo, payouts, email, and deletion.">
-                  <AccountTab profile={profile} setProfile={setProfileSafe} />
-                </ProfileSection>
-              </>
-            )}
-          </div>
+        <DeleteAccountSection />
 
-          <ProfileTabActions
-            onSave={handleSave}
-            onReset={handleReset}
-            saving={saving}
-            autosaving={autosaving}
-          />
-        </div>
+        <ProfileTabActions
+          onSave={handleSave}
+          onReset={handleReset}
+          saving={saving}
+          autosaving={autosaving}
+        />
       </div>
     </div>
   );

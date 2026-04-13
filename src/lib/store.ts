@@ -1,9 +1,20 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { User, Job } from '@/types';
 import { api } from './services/api';
 
+const ACCESS_KEY = '2une_access_token';
+const REFRESH_KEY = '2une_refresh_token';
+
+function hasStoredSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!(localStorage.getItem(ACCESS_KEY) || localStorage.getItem(REFRESH_KEY));
+}
+
 interface AuthState {
   user: User | null;
+  /** True after persist rehydrate from localStorage (client-only). */
+  authReady: boolean;
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
@@ -13,60 +24,83 @@ interface AuthState {
   updateUser: (data: Partial<User>, opts?: { silent?: boolean }) => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  isLoading: true,
-  login: async (email, password) => {
-    set({ isLoading: true });
-    try {
-      const user = await api.login(email, password);
-      set({ user, isLoading: false });
-    } catch (e) {
-      set({ isLoading: false });
-      throw e;
-    }
-  },
-  loginWithGoogle: async (idToken) => {
-    set({ isLoading: true });
-    try {
-      const user = await api.loginWithGoogle(idToken);
-      set({ user, isLoading: false });
-    } catch (e) {
-      set({ isLoading: false });
-      throw e;
-    }
-  },
-  loginWithLinkedinHandoff: async (handoff) => {
-    set({ isLoading: true });
-    try {
-      const user = await api.loginWithLinkedinHandoff(handoff);
-      set({ user, isLoading: false });
-    } catch (e) {
-      set({ isLoading: false });
-      throw e;
-    }
-  },
-  logout: async () => {
-    set({ isLoading: true });
-    await api.logout();
-    set({ user: null, isLoading: false });
-  },
-  checkAuth: async () => {
-    set({ isLoading: true });
-    const user = await api.getUserProfile();
-    set({ user, isLoading: false });
-  },
-  updateUser: async (data: Partial<User>, opts?: { silent?: boolean }) => {
-    if (!opts?.silent) set({ isLoading: true });
-    try {
-      const user = await api.updateUserProfile(data);
-      set({ user, isLoading: false });
-    } catch (e) {
-      set({ isLoading: false });
-      throw e;
-    }
-  },
-}));
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      authReady: false,
+      isLoading: true,
+      login: async (email, password) => {
+        set({ isLoading: true });
+        try {
+          const user = await api.login(email, password);
+          set({ user, isLoading: false });
+        } catch (e) {
+          set({ isLoading: false });
+          throw e;
+        }
+      },
+      loginWithGoogle: async (idToken) => {
+        set({ isLoading: true });
+        try {
+          const user = await api.loginWithGoogle(idToken);
+          set({ user, isLoading: false });
+        } catch (e) {
+          set({ isLoading: false });
+          throw e;
+        }
+      },
+      loginWithLinkedinHandoff: async (handoff) => {
+        set({ isLoading: true });
+        try {
+          const user = await api.loginWithLinkedinHandoff(handoff);
+          set({ user, isLoading: false });
+        } catch (e) {
+          set({ isLoading: false });
+          throw e;
+        }
+      },
+      logout: async () => {
+        set({ isLoading: true });
+        await api.logout();
+        useAuthStore.persist.clearStorage();
+        set({ user: null, isLoading: false });
+      },
+      checkAuth: async () => {
+        set({ isLoading: true });
+        const prevUser = get().user;
+        const user = await api.getUserProfile();
+        if (user) {
+          set({ user, isLoading: false });
+          return;
+        }
+        // Keep showing the last known user while tokens still exist but /users/me failed transiently.
+        if (hasStoredSession() && prevUser) {
+          set({ user: prevUser, isLoading: false });
+          return;
+        }
+        set({ user: null, isLoading: false });
+      },
+      updateUser: async (data, opts) => {
+        if (!opts?.silent) set({ isLoading: true });
+        try {
+          const user = await api.updateUserProfile(data);
+          set({ user, isLoading: false });
+        } catch (e) {
+          set({ isLoading: false });
+          throw e;
+        }
+      },
+    }),
+    {
+      name: '2une_auth_session',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ user: state.user }),
+      version: 1,
+      skipHydration: true,
+    },
+  ),
+);
 
 interface JobState {
   jobs: Job[];

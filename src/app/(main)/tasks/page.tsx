@@ -16,7 +16,7 @@ import { EmptyState } from '@/components/EmptyState';
 
 export default function TasksPage() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, authReady, isLoading: authSessionLoading } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
   const [assignments, setAssignments] = useState<
@@ -49,12 +49,13 @@ export default function TasksPage() {
   }, [router]);
 
   useEffect(() => {
+    if (!authReady || authSessionLoading) return;
     if (!user) {
       router.replace('/login');
       return;
     }
     void loadList();
-  }, [user, router, loadList]);
+  }, [authReady, authSessionLoading, user, router, loadList]);
 
   const claimNext = async () => {
     try {
@@ -107,7 +108,7 @@ export default function TasksPage() {
     }
   };
 
-  if (!user || loading) {
+  if (!authReady || authSessionLoading || !user || loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -184,7 +185,7 @@ export default function TasksPage() {
             <EmptyState
               title="No assignments yet"
               description="Once you're approved for a project, tasks will appear here."
-              actions={[{ label: 'Browse projects', href: '/jobs', variant: 'outline' }]}
+              actions={[{ label: 'Explore projects', href: '/', variant: 'outline' }]}
               className="py-8"
             />
           ) : (
@@ -202,8 +203,8 @@ export default function TasksPage() {
           )}
           <p className="text-xs text-muted-foreground mt-4">
             Need an approved application?{' '}
-            <Link href="/jobs" className="text-primary underline">
-              Browse projects
+            <Link href="/" className="text-primary underline">
+              Explore projects
             </Link>
             .
           </p>

@@ -23,7 +23,7 @@ export default function InterviewPage() {
   const params = useParams();
   const jobId = routeJobId(params.jobId);
 
-  const { user } = useAuthStore();
+  const { user, authReady, isLoading: authSessionLoading } = useAuthStore();
   const router = useRouter();
   const [app, setApp] = useState<Application | null>(null);
   const [questions, setQuestions] = useState<{ id: string; question: string }[] | null>(null);
@@ -32,6 +32,7 @@ export default function InterviewPage() {
 
   useEffect(() => {
     if (!AI_INTERVIEW_ENABLED) return;
+    if (!authReady || authSessionLoading) return;
 
     if (!user) {
       router.push('/login');
@@ -83,7 +84,7 @@ export default function InterviewPage() {
     }
 
     void run();
-  }, [user, jobId, router]);
+  }, [user, jobId, router, authReady, authSessionLoading]);
 
   if (!jobId) {
     return (
@@ -103,7 +104,7 @@ export default function InterviewPage() {
           description="The AI interview step is temporarily turned off. Your application is still on file—check the dashboard for status."
           actions={[
             { label: 'Go to dashboard', href: '/dashboard', variant: 'default' },
-            { label: 'Browse projects', href: '/jobs', variant: 'outline' },
+            { label: 'Explore projects', href: '/', variant: 'outline' },
           ]}
         />
       </div>
@@ -156,7 +157,7 @@ export default function InterviewPage() {
         description="Please try again in a moment."
         actions={[
           { label: 'Retry', onClick: () => window.location.reload(), variant: 'default' },
-          { label: 'Back to projects', href: '/jobs', variant: 'outline' },
+          { label: 'Back to explore', href: '/', variant: 'outline' },
         ]}
       />
     );

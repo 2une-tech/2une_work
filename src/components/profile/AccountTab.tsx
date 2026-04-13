@@ -1,14 +1,11 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { useAuthStore } from '@/lib/store';
-import { useHasProjectOffer } from '@/lib/useHasProjectOffer';
 import type { MockWorkerProfile } from '@/types/profile';
 
 type Props = {
@@ -18,13 +15,9 @@ type Props = {
 
 export function AccountTab({ profile, setProfile }: Props) {
   const { user, updateUser } = useAuthStore();
-  const { hasOffer, loading: offerLoading } = useHasProjectOffer();
   const fileRef = useRef<HTMLInputElement>(null);
-  const acc = profile.account;
-
-  const setAcc = (patch: Partial<MockWorkerProfile['account']>) => {
-    setProfile((p) => ({ ...p, account: { ...p.account, ...patch } }));
-  };
+  void profile;
+  void setProfile;
 
   const initials =
     user?.name
@@ -72,6 +65,7 @@ export function AccountTab({ profile, setProfile }: Props) {
         </div>
       </div>
 
+      {/*
       <div className="border-b border-border pb-10">
         <div className="flex justify-between items-start mb-2 gap-4">
           <div>
@@ -147,18 +141,24 @@ export function AccountTab({ profile, setProfile }: Props) {
           Change email
         </Button>
       </div>
-      <div>
-        <h3 className="text-[14px] font-bold text-foreground mb-1">Delete account</h3>
-        <p className="mb-4 text-xs text-muted-foreground">Permanently delete your account and all data from 2une.</p>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => toast.message('Account deletion is coming soon.')}
-        >
-          Delete account
-        </Button>
-      </div>
+      */}
+    </div>
+  );
+}
+
+export function DeleteAccountSection() {
+  return (
+    <div>
+      <h3 className="text-[14px] font-bold text-foreground mb-1">Delete account</h3>
+      <p className="mb-4 text-xs text-muted-foreground">Permanently delete your account and all data from 2une.</p>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-8 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        onClick={() => toast.message('Account deletion is coming soon.')}
+      >
+        Delete account
+      </Button>
     </div>
   );
 }

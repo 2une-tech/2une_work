@@ -133,6 +133,7 @@ export function mergeProfileFromApi(
         linkedinUrl?: string | null;
         linkedinConnected?: boolean | null;
         resumeExtras?: unknown;
+        generativeProfilePictures?: boolean | null;
       } | null;
       skills: { name: string }[];
     };
@@ -324,6 +325,10 @@ export function mergeProfileFromApi(
   const comm = parts.communications as Partial<MockWorkerProfile['communications']> | null;
   if (comm) {
     base.communications = { ...base.communications, ...comm };
+  }
+
+  if (p && typeof p.generativeProfilePictures === 'boolean') {
+    base.account = { ...base.account, generativeProfilePictures: p.generativeProfilePictures };
   }
 
   return base;
