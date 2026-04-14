@@ -28,6 +28,17 @@ export default function LoginPage() {
   const linkedinHandoffStarted = useRef(false);
   const linkedinQueryErrorShown = useRef(false);
 
+  const nextPath = (() => {
+    if (typeof window === 'undefined') return '';
+    const q = new URLSearchParams(window.location.search);
+    const n = q.get('next') ?? '';
+    if (!n.trim()) return '';
+    if (!n.startsWith('/')) return '';
+    // Prevent open redirects: only allow relative paths within this app.
+    if (n.startsWith('//')) return '';
+    return n;
+  })();
+
   useEffect(() => {
     if (redirectConsumeStarted.current) return;
     redirectConsumeStarted.current = true;
@@ -42,7 +53,7 @@ export default function LoginPage() {
         setLoading(true);
         await useAuthStore.getState().loginWithGoogle(idToken);
         toast.success('Logged in successfully.');
-        router.push('/dashboard');
+        router.push(nextPath || '/dashboard');
       } catch (err) {
         if (err instanceof ApiRequestError && err.code === 'INVALID_FIREBASE_TOKEN') {
           toast.error(
@@ -68,7 +79,7 @@ export default function LoginPage() {
         setLoading(true);
         await loginWithLinkedinHandoff(token);
         toast.success('Logged in successfully.');
-        router.push('/dashboard');
+        router.push(nextPath || '/dashboard');
       } catch (err) {
         if (err instanceof ApiRequestError && err.code === 'INVALID_LINKEDIN_HANDOFF') {
           toast.error('Sign-in session expired. Try LinkedIn again.');
@@ -105,7 +116,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success('Logged in successfully.');
-      router.push('/dashboard');
+      router.push(nextPath || '/dashboard');
     } catch (err) {
       if (err instanceof ApiRequestError && err.code === 'EMAIL_NOT_VERIFIED') {
         toast.error('Verify your email first.');

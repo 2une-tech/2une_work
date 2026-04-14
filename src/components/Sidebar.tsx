@@ -7,7 +7,7 @@ import { useAuthStore } from '@/lib/store';
 import {
   Search,
   Home,
-  DollarSign,
+  IndianRupee,
   User,
   LogOut,
   LogIn,
@@ -37,7 +37,7 @@ export default function Sidebar() {
         { name: 'Explore', href: '/', icon: Search },
         { name: 'Home', href: '/dashboard', icon: Home },
         { name: 'Tasks', href: '/tasks', icon: ClipboardList },
-        { name: 'Earnings', href: '/earnings', icon: DollarSign },
+        { name: 'Earnings', href: '/earnings', icon: IndianRupee },
         { name: 'Profile', href: '/profile', icon: User },
       ]
     : [{ name: 'Explore', href: '/', icon: Search }];

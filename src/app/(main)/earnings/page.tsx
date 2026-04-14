@@ -1,6 +1,6 @@
 'use client';
 
-import { DollarSign } from 'lucide-react';
+import { IndianRupee } from 'lucide-react';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { EmptyState } from '@/components/EmptyState';
 
@@ -11,7 +11,7 @@ export default function EarningsPage() {
   return (
     <div className="mx-auto min-h-screen max-w-4xl bg-background px-6 py-8 md:px-8">
       <div className="mb-6 flex items-center gap-3">
-        <DollarSign className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
+        <IndianRupee className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Earnings</h1>
           <p className="text-sm text-muted-foreground">Your payouts and earnings history.</p>

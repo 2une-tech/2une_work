@@ -4,47 +4,57 @@ import type { Job } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowUpRight, Sparkles } from 'lucide-react';
 
 export default function JobCard(props: { job: Job; className?: string }) {
   const { job, className } = props;
+  const router = useRouter();
+
+  const detailsHref = `/project/${job.id}`;
+  const applyHref = detailsHref;
 
   return (
-    <div className={cn('rounded-lg border border-border bg-card p-4', className)}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-foreground">{job.title}</h3>
-            {job.contractLabel ? (
-              <Badge variant="secondary" className="text-[11px]">
-                {job.contractLabel}
-              </Badge>
-            ) : null}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">{job.company}</p>
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="text-sm font-semibold text-foreground">{job.payHeadline}</div>
-          <div className="text-xs text-muted-foreground">{job.payUnitLine}</div>
-        </div>
+    <div
+      role="link"
+      tabIndex={0}
+      className={cn(
+        'group rounded-lg border border-border bg-card p-4 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary focus-within:border-primary',
+        className,
+      )}
+      onClick={() => router.push(detailsHref)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          router.push(detailsHref);
+        }
+      }}
+      aria-label={`View ${job.title}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground line-clamp-2">
+          {job.title}
+        </h3>
+
+        <Link
+          href={applyHref}
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0 inline-flex items-center gap-1 text-[13px] font-medium text-primary opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 hover:underline"
+        >
+          Apply <ArrowUpRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
-      <p className="mt-3 text-sm text-muted-foreground">{job.shortDescription}</p>
+      <div className="mt-1 text-[13px] text-muted-foreground">
+        <span className="font-medium text-foreground">{job.payHeadline}</span> {job.payUnitLine}
+      </div>
 
-      {job.tags?.length ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {job.tags.slice(0, 8).map((t) => (
-            <Badge key={t} variant="outline" className="text-[11px]">
-              {t}
-            </Badge>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="text-xs text-muted-foreground">{job.footerMetaText ?? job.category}</div>
-        <Button size="sm" className="h-8">
-          View
-        </Button>
+      <div className="mt-3">
+        <Badge variant="secondary" className="gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium">
+          <Sparkles className="h-3.5 w-3.5" />
+          Large hiring
+        </Badge>
       </div>
     </div>
   );

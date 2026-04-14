@@ -12,7 +12,7 @@ import {
   mergeProfileFromApi,
   workingDaysToApi,
 } from './profileMap';
-import { formatPayAmount } from '@/lib/utils';
+import { formatINRRange } from '@/lib/utils';
 
 export { ApiRequestError };
 
@@ -70,8 +70,7 @@ function mapProjectToJob(p: ProjectApiPayload): Job {
   const max = Number.isFinite(p.payMax) ? p.payMax : (p.payPerTask ?? min);
   const unitWord = payType === 'per_hour' ? 'hour' : 'task';
   const contractLabel: Job['contractLabel'] = payType === 'per_hour' ? 'Hourly contract' : 'Per-task contract';
-  const payHeadline =
-    min === max ? `$${formatPayAmount(min)}` : `$${formatPayAmount(min)} - $${formatPayAmount(max)}`;
+  const payHeadline = formatINRRange(min, max);
   const payUnitLine = `per ${unitWord}`;
   const payRange = `${payHeadline} ${payUnitLine}`;
 

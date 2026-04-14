@@ -70,7 +70,7 @@ export function WorkPreferencesTab({ profile, setProfile }: Props) {
             <h4 className="text-[13px] text-foreground font-medium mb-2">Full-time</h4>
             <div className="flex items-center gap-2 mb-1">
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-foreground font-bold">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-foreground font-bold">₹</span>
                 <Input
                   inputMode="numeric"
                   value={wp.minExpectedFullTimeYearly}
@@ -88,7 +88,7 @@ export function WorkPreferencesTab({ profile, setProfile }: Props) {
             <h4 className="text-[13px] text-foreground font-medium mb-2">Part-time</h4>
             <div className="flex items-center gap-2 mb-1">
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-foreground font-bold">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-foreground font-bold">₹</span>
                 <Input
                   inputMode="numeric"
                   value={wp.minExpectedPartTimeHourly}

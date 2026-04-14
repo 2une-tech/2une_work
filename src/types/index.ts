@@ -3,7 +3,7 @@ export interface Job {
   title: string;
   company: string;
   payRange: string;
-  /** Mercor-style pay line for hero (e.g. `$0 – $65`). */
+  /** Mercor-style pay line for hero (e.g. `₹0 – ₹65`). */
   payHeadline: string;
   /** e.g. `per hour` or `per task`. */
   payUnitLine: string;

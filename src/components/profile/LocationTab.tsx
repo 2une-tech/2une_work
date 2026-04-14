@@ -52,7 +52,7 @@ export function LocationTab({ profile, setProfile }: Props) {
             />
           </div>
           <div>
-            <label className="text-[13px] font-bold text-foreground block mb-1">Postal code</label>
+            <label className="text-[13px] font-bold text-foreground block mb-1">PIN code</label>
             <Input
               value={w.postalCode}
               onChange={(e) => setWA({ postalCode: e.target.value })}
@@ -78,7 +78,7 @@ export function LocationTab({ profile, setProfile }: Props) {
         <h3 className="text-[15px] font-bold text-foreground mb-1">Legal attestation</h3>
         <p className="text-[12px] text-muted-foreground mb-6">Confirm your legally authorized work status</p>
         <div className="mb-8">
-          <label className="text-[13px] font-bold text-foreground block mb-1">Date of Birth (in MM/DD/YYYY)</label>
+          <label className="text-[13px] font-bold text-foreground block mb-1">Date of Birth (in DD/MM/YYYY)</label>
           <Input
             value={w.dateOfBirth}
             onChange={(e) => setWA({ dateOfBirth: e.target.value })}

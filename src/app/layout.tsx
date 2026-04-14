@@ -9,7 +9,7 @@ import { AuthHydration } from "@/components/AuthHydration";
 export const metadata: Metadata = {
   title: "2une — AI data work & projects",
   description:
-    "Train AI with data sourcing, annotation, and RLHF. Find flexible projects and apply to work with 2une — built for talent in India and beyond.",
+    "Train AI with data sourcing, annotation, and RLHF. Find flexible projects and apply to work with 2une — built for talent in India.",
   icons: {
     icon: "/logo_white.png",
     apple: "/logo_white.png",

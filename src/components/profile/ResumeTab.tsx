@@ -70,7 +70,7 @@ export function ResumeTab({ profile, setProfile, authEmail }: Props) {
               value={r.phoneCountryLabel}
               onChange={(e) => setResume({ phoneCountryLabel: e.target.value })}
               className="h-9 w-[100px] rounded-r-none border-border bg-muted/50 text-[13px] shrink-0"
-              placeholder="+1"
+              placeholder="+91"
               aria-label="Country or dial code"
             />
             <Input
