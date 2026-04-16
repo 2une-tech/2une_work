@@ -39,7 +39,7 @@ export default function SignupPage() {
           return;
         }
         setLoading(true);
-        await useAuthStore.getState().loginWithGoogle(idToken);
+        await useAuthStore.getState().loginWithFirebase(idToken);
         toast.success('Signed in with Google.');
         router.push('/dashboard');
       } catch (err) {
@@ -95,15 +95,16 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { verificationToken } = await api.signup({ email, password, name });
-      toast.success('Account created. Verify your email before logging in.');
-      if (verificationToken && typeof window !== 'undefined') {
-        sessionStorage.setItem('2une_last_verify_token', verificationToken);
-      }
+      await api.signup({ email, password, name });
+      toast.success('Check your inbox—we sent a verification link.');
       router.push('/verify-email');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Signup failed';
-      toast.error(message);
+      if (err instanceof FirebaseError && err.code === 'auth/email-already-in-use') {
+        toast.error('That email is already registered. Try logging in.');
+      } else {
+        const message = err instanceof Error ? err.message : 'Signup failed';
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -149,7 +150,7 @@ export default function SignupPage() {
       <Card className="border-border p-6 shadow-none">
         <AuthBrand
           title="Create your account"
-          subtitle="You’ll verify email next. In development, the API may return a token in the response."
+          subtitle="We’ll email you a link to verify your address before you can sign in."
         />
         <CardContent className="p-0">
           <form onSubmit={handleSubmit} className="space-y-4">

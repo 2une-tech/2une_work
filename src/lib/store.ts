@@ -17,7 +17,7 @@ interface AuthState {
   authReady: boolean;
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<void>;
-  loginWithGoogle: (idToken: string) => Promise<void>;
+  loginWithFirebase: (idToken: string) => Promise<void>;
   loginWithLinkedinHandoff: (handoff: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -40,10 +40,10 @@ export const useAuthStore = create<AuthState>()(
           throw e;
         }
       },
-      loginWithGoogle: async (idToken) => {
+      loginWithFirebase: async (idToken) => {
         set({ isLoading: true });
         try {
-          const user = await api.loginWithGoogle(idToken);
+          const user = await api.loginWithFirebase(idToken);
           set({ user, isLoading: false });
         } catch (e) {
           set({ isLoading: false });

@@ -1,5 +1,15 @@
 import { initializeApp, getApps, getApp, type FirebaseOptions } from 'firebase/app';
-import { getAuth, getRedirectResult, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  getRedirectResult,
+  GoogleAuthProvider,
+  sendEmailVerification,
+  signInWithEmailAndPassword,
+  signInWithRedirect,
+  signOut,
+  type User,
+} from 'firebase/auth';
 
 function readFirebaseOptions(): FirebaseOptions {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
@@ -58,4 +68,25 @@ export async function consumeGoogleRedirectIdToken(): Promise<string | null> {
   const result = await getRedirectResult(auth);
   if (!result?.user) return null;
   return result.user.getIdToken();
+}
+
+export async function signInWithEmailPassword(email: string, password: string): Promise<string> {
+  const auth = getFirebaseAuth();
+  const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+  return cred.user.getIdToken();
+}
+
+export async function createUserWithEmailPassword(email: string, password: string): Promise<User> {
+  const auth = getFirebaseAuth();
+  const cred = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+  return cred.user;
+}
+
+export async function sendEmailVerificationForUser(user: User): Promise<void> {
+  await sendEmailVerification(user);
+}
+
+export async function signOutFirebase(): Promise<void> {
+  const auth = getFirebaseAuth();
+  await signOut(auth);
 }

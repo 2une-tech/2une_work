@@ -51,7 +51,7 @@ export default function LoginPage() {
           return;
         }
         setLoading(true);
-        await useAuthStore.getState().loginWithGoogle(idToken);
+        await useAuthStore.getState().loginWithFirebase(idToken);
         toast.success('Logged in successfully.');
         router.push(nextPath || '/dashboard');
       } catch (err) {
@@ -118,9 +118,26 @@ export default function LoginPage() {
       toast.success('Logged in successfully.');
       router.push(nextPath || '/dashboard');
     } catch (err) {
-      if (err instanceof ApiRequestError && err.code === 'EMAIL_NOT_VERIFIED') {
-        toast.error('Verify your email first.');
-        router.push('/verify-email');
+      if (err instanceof FirebaseError) {
+        if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+          toast.error('Invalid email or password.');
+          return;
+        }
+        if (err.code === 'auth/user-not-found') {
+          toast.error('No account for that email.');
+          return;
+        }
+        if (err.code === 'auth/too-many-requests') {
+          toast.error('Too many attempts. Try again later.');
+          return;
+        }
+      }
+      if (err instanceof ApiRequestError && err.code === 'EMAIL_REQUIRED') {
+        toast.error('Your sign-in session is missing an email. Try Google sign-in again or contact support.');
+        return;
+      }
+      if (err instanceof ApiRequestError && err.code === 'LEGACY_PASSWORD_LOGIN_DISABLED') {
+        toast.error(err.message);
         return;
       }
       if (

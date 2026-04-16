@@ -13,6 +13,12 @@ import {
   workingDaysToApi,
 } from './profileMap';
 import { formatINRRange } from '@/lib/utils';
+import {
+  createUserWithEmailPassword,
+  sendEmailVerificationForUser,
+  signInWithEmailPassword,
+  signOutFirebase,
+} from '@/lib/firebaseClient';
 
 export { ApiRequestError };
 
@@ -198,22 +204,16 @@ async function flushPendingFullName(): Promise<void> {
 }
 
 export const api = {
-  async signup(input: { email: string; password: string; name: string }): Promise<{
-    verificationToken?: string;
-    message: string;
-  }> {
-    const data = await apiRequest<{
-      user: { id: string; email: string };
-      verificationToken: string;
-      message: string;
-    }>('/auth/signup', {
-      method: 'POST',
-      body: { email: input.email.trim().toLowerCase(), password: input.password },
-    });
+  /**
+   * Creates the Firebase Auth user, sends the verification email, and leaves the user signed in to Firebase
+   * so the verify-email screen can resend. API session is obtained after email is verified and the user logs in.
+   */
+  async signup(input: { email: string; password: string; name: string }): Promise<void> {
     if (typeof window !== 'undefined' && input.name.trim()) {
       sessionStorage.setItem(PENDING_FULL_NAME_KEY, input.name.trim());
     }
-    return { verificationToken: data.verificationToken, message: data.message };
+    const user = await createUserWithEmailPassword(input.email, input.password);
+    await sendEmailVerificationForUser(user);
   },
 
   async verifyEmail(token: string): Promise<void> {
@@ -227,22 +227,11 @@ export const api = {
     if (!password || password.length < 8) {
       throw new Error('Password must be at least 8 characters.');
     }
-    const data = await apiRequest<{
-      accessToken: string;
-      refreshToken: string;
-      user: { id: string; email: string; role: string };
-    }>('/auth/login', {
-      method: 'POST',
-      body: { email: email.trim().toLowerCase(), password },
-    });
-    setTokens(data.accessToken, data.refreshToken);
-    await flushPendingFullName();
-    const session = await this.getUserProfile();
-    if (!session) throw new Error('Login failed');
-    return session;
+    const idToken = await signInWithEmailPassword(email, password);
+    return this.loginWithFirebase(idToken);
   },
 
-  async loginWithGoogle(idToken: string): Promise<User> {
+  async loginWithFirebase(idToken: string): Promise<User> {
     const data = await apiRequest<{
       accessToken: string;
       refreshToken: string;
@@ -285,6 +274,11 @@ export const api = {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(PENDING_FULL_NAME_KEY);
       sessionStorage.removeItem(MINIMUM_PROFILE_MODAL_DISMISSED_KEY);
+      try {
+        await signOutFirebase();
+      } catch {
+        /* ignore */
+      }
     }
   },
 
@@ -374,14 +368,22 @@ export const api = {
       });
       let name = me.email.split('@')[0] || 'User';
       let linkedinConnected = false;
+      let avatar: string | undefined;
       try {
         const bundle = await apiRequest<{
-          profile: { fullName?: string | null; linkedinConnected?: boolean | null; phone?: string | null } | null;
+          profile: {
+            fullName?: string | null;
+            linkedinConnected?: boolean | null;
+            phone?: string | null;
+            profileImageUrl?: string | null;
+          } | null;
         }>('/users/profile', {
           auth: true,
         });
         if (bundle.profile?.fullName?.trim()) name = bundle.profile.fullName.trim();
         linkedinConnected = !!bundle.profile?.linkedinConnected;
+        const pic = bundle.profile?.profileImageUrl?.trim();
+        if (pic) avatar = pic;
       } catch {
         /* ignore */
       }
@@ -395,6 +397,7 @@ export const api = {
         role: me.role as User['role'],
         isVerified: me.isVerified,
         linkedinConnected,
+        avatar,
       };
     } catch (e) {
       // Only drop the session when the API rejects credentials. Clearing tokens on *any* error
