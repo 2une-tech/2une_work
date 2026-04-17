@@ -13,12 +13,7 @@ import {
   workingDaysToApi,
 } from './profileMap';
 import { formatINRRange } from '@/lib/utils';
-import {
-  createUserWithEmailPassword,
-  sendEmailVerificationForUser,
-  signInWithEmailPassword,
-  signOutFirebase,
-} from '@/lib/firebaseClient';
+import { signOutFirebase } from '@/lib/firebaseClient';
 
 export { ApiRequestError };
 
@@ -205,15 +200,16 @@ async function flushPendingFullName(): Promise<void> {
 
 export const api = {
   /**
-   * Creates the Firebase Auth user, sends the verification email, and leaves the user signed in to Firebase
-   * so the verify-email screen can resend. API session is obtained after email is verified and the user logs in.
+   * Creates a legacy user (email/password) in the API.
    */
-  async signup(input: { email: string; password: string; name: string }): Promise<void> {
+  async signup(input: { email: string; password: string; name: string }): Promise<{ verificationToken?: string }> {
     if (typeof window !== 'undefined' && input.name.trim()) {
       sessionStorage.setItem(PENDING_FULL_NAME_KEY, input.name.trim());
     }
-    const user = await createUserWithEmailPassword(input.email, input.password);
-    await sendEmailVerificationForUser(user);
+    return await apiRequest<{ verificationToken?: string }>('/auth/signup', {
+      method: 'POST',
+      body: { email: input.email.trim(), password: input.password },
+    });
   },
 
   async verifyEmail(token: string): Promise<void> {
@@ -227,8 +223,19 @@ export const api = {
     if (!password || password.length < 8) {
       throw new Error('Password must be at least 8 characters.');
     }
-    const idToken = await signInWithEmailPassword(email, password);
-    return this.loginWithFirebase(idToken);
+    const data = await apiRequest<{
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string; email: string; role: string };
+    }>('/auth/login', {
+      method: 'POST',
+      body: { email: email.trim().toLowerCase(), password },
+    });
+    setTokens(data.accessToken, data.refreshToken);
+    await flushPendingFullName();
+    const session = await this.getUserProfile();
+    if (!session) throw new Error('Login failed');
+    return session;
   },
 
   async loginWithFirebase(idToken: string): Promise<User> {

@@ -1,71 +1,43 @@
 'use client';
 
-import { reload } from 'firebase/auth';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { getFirebaseAuth, sendEmailVerificationForUser } from '@/lib/firebaseClient';
+import { api } from '@/lib/services/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { AuthBrand } from '@/components/AuthBrand';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [hasUser, setHasUser] = useState<boolean | null>(null);
-
-  const refreshAuthUser = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const u = getFirebaseAuth().currentUser;
-      setHasUser(!!u);
-    } catch {
-      setHasUser(false);
-    }
-  }, []);
+  const [token, setToken] = useState('');
 
   useEffect(() => {
-    refreshAuthUser();
-  }, [refreshAuthUser]);
+    if (typeof window === 'undefined') return;
+    const pending = sessionStorage.getItem('2une_pending_verify_token')?.trim() ?? '';
+    if (pending) setToken(pending);
+  }, []);
 
-  const handleResend = async () => {
-    setLoading(true);
-    try {
-      const u = getFirebaseAuth().currentUser;
-      if (!u) {
-        toast.error('Sign in with the account you just created, or start signup again.');
-        return;
-      }
-      await sendEmailVerificationForUser(u);
-      toast.success('Verification email sent again.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not resend email');
-    } finally {
-      setLoading(false);
+  const handleVerify = async () => {
+    const t = token.trim();
+    if (!t) {
+      toast.error('Enter the verification token.');
+      return;
     }
-  };
-
-  const handleCheckVerified = async () => {
     setLoading(true);
     try {
-      const u = getFirebaseAuth().currentUser;
-      if (!u) {
-        toast.message('Open the link in your email, then log in here.');
-        router.push('/login');
-        return;
-      }
-      await reload(u);
-      if (u.emailVerified) {
-        toast.success('Email verified. You can log in.');
-        router.push('/login');
-      } else {
-        toast.message('Not verified yet—check your inbox and spam folder.');
-      }
+      await api.verifyEmail(t);
+      if (typeof window !== 'undefined') sessionStorage.removeItem('2une_pending_verify_token');
+      toast.success('Email verified. You can log in.');
+      router.push('/login');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Something went wrong');
+      toast.error(err instanceof Error ? err.message : 'Verification failed');
     } finally {
       setLoading(false);
     }
@@ -76,40 +48,31 @@ export default function VerifyEmailPage() {
       <Card className="border-border p-6 shadow-none">
         <AuthBrand
           title="Verify your email"
-          subtitle="We sent a link to your address. Open it on this device, then continue below."
+          subtitle="Paste the verification token you received, then continue."
         />
         <CardContent className="space-y-3 p-0 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="token" className="text-xs text-muted-foreground">
+              Verification token
+            </Label>
+            <Input
+              id="token"
+              autoComplete="one-time-code"
+              placeholder="Paste token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              className="h-10 bg-background text-sm"
+            />
+          </div>
           <Button
             type="button"
             className="h-10 w-full font-medium"
-            onClick={() => void handleCheckVerified()}
+            onClick={() => void handleVerify()}
             disabled={loading}
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            I’ve verified — continue to log in
+            Verify email
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 w-full font-medium"
-            onClick={() => void handleResend()}
-            disabled={loading || hasUser === false}
-          >
-            Resend verification email
-          </Button>
-          {hasUser === false ? (
-            <p className="text-center text-xs text-muted-foreground">
-              Resend is available when you’re still signed in after signup. Otherwise use{' '}
-              <Link href="/signup" className="font-medium text-primary hover:underline">
-                Create account
-              </Link>{' '}
-              or{' '}
-              <Link href="/login" className="font-medium text-primary hover:underline">
-                Log in
-              </Link>
-              .
-            </p>
-          ) : null}
           <p className="pt-1 text-center text-sm text-muted-foreground">
             <Link href="/login" className="font-medium text-primary hover:underline">
               Back to log in

@@ -1,5 +1,4 @@
 'use client';
-
 import { FirebaseError } from 'firebase/app';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -93,16 +92,15 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.signup({ email, password, name });
+      const res = await api.signup({ email, password, name });
+      if (res?.verificationToken && typeof window !== 'undefined') {
+        sessionStorage.setItem('2une_pending_verify_token', res.verificationToken);
+      }
       toast.success('Check your inbox—we sent a verification link.');
       router.push('/verify-email');
     } catch (err) {
-      if (err instanceof FirebaseError && err.code === 'auth/email-already-in-use') {
-        toast.error('That email is already registered. Try logging in.');
-      } else {
-        const message = err instanceof Error ? err.message : 'Signup failed';
-        toast.error(message);
-      }
+      const message = err instanceof Error ? err.message : 'Signup failed';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
