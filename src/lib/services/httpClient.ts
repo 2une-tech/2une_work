@@ -74,6 +74,23 @@ export function clearTokens() {
 type ApiSuccess<T> = { success: true; data: T };
 type ApiFail = { success: false; error: { code: string; message: string; details?: unknown } };
 
+function shouldDebugApi(): boolean {
+  if (typeof window === 'undefined') return false;
+  const env = process.env.NEXT_PUBLIC_DEBUG_API?.trim();
+  if (env === '1' || env?.toLowerCase() === 'true') return true;
+  try {
+    return localStorage.getItem('2une_debug_api') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function debugLogApi(event: string, payload: Record<string, unknown>) {
+  if (!shouldDebugApi()) return;
+  // eslint-disable-next-line no-console
+  console.info(`[2une][api] ${event}`, payload);
+}
+
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly code: string;
@@ -90,6 +107,17 @@ export class ApiRequestError extends Error {
 
 let refreshInFlight: Promise<boolean> | null = null;
 
+function shouldInvalidateSessionOnRefreshFailure(status: number, body: ApiFail | null): boolean {
+  if (status === 401 || status === 403) return true;
+  const code = body?.error?.code ?? '';
+  return (
+    code === 'INVALID_REFRESH_TOKEN' ||
+    code === 'REFRESH_EXPIRED' ||
+    code === 'REFRESH_REUSE_DETECTED' ||
+    code === 'USER_BLOCKED'
+  );
+}
+
 async function tryRefresh(): Promise<boolean> {
   const refresh = getStoredRefreshToken();
   if (!refresh) return false;
@@ -102,21 +130,30 @@ async function tryRefresh(): Promise<boolean> {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken: refresh }),
         });
-        let json: ApiSuccess<{ accessToken: string; refreshToken: string }> | ApiFail;
+        const rawText = await res.text();
+        let json: ApiSuccess<{ accessToken: string; refreshToken: string }> | ApiFail | null = null;
         try {
-          json = (await res.json()) as ApiSuccess<{ accessToken: string; refreshToken: string }> | ApiFail;
+          json = JSON.parse(rawText) as ApiSuccess<{ accessToken: string; refreshToken: string }> | ApiFail;
         } catch {
-          clearTokens();
+          // Proxy/HTML/502 body — do not wipe the session; user can retry after refresh.
           return false;
         }
-        if (!res.ok || !json.success) {
-          clearTokens();
+        if (!json || typeof json !== 'object' || !('success' in json)) {
+          return false;
+        }
+        if (!json.success) {
+          if (shouldInvalidateSessionOnRefreshFailure(res.status, json as ApiFail)) {
+            clearTokens();
+          }
+          return false;
+        }
+        if (!res.ok) {
           return false;
         }
         setTokens(json.data.accessToken, json.data.refreshToken);
         return true;
       } catch {
-        clearTokens();
+        // Network error — keep refresh token for a later attempt.
         return false;
       } finally {
         refreshInFlight = null;
@@ -135,6 +172,7 @@ export type RequestOptions = Omit<RequestInit, 'body'> & {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { auth = false, body, headers: initHeaders, ...rest } = options;
   const url = buildUrl(path);
+  const startedAt = Date.now();
 
   const headers = new Headers(initHeaders);
   if (body !== undefined && !(body instanceof FormData)) {
@@ -151,6 +189,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       headers,
       body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
+
+  debugLogApi('request', {
+    path,
+    url,
+    method: (rest.method ?? 'GET') as string,
+    auth,
+    hasBody: body !== undefined,
+    body: body instanceof FormData ? '[FormData]' : body,
+  });
 
   let res = await doFetch();
 
@@ -179,6 +226,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       `Expected JSON from API; got ${res.headers.get('content-type') || 'unknown content-type'}.${hint}${preview ? ` Body starts with: ${preview}` : ''}`,
     );
   }
+
+  debugLogApi('response', {
+    path,
+    status: res.status,
+    ok: res.ok,
+    ms: Date.now() - startedAt,
+    json,
+  });
 
   if (!json || typeof json !== 'object' || !('success' in json)) {
     throw new ApiRequestError(res.status, 'INVALID_RESPONSE', 'API response is not a { success, data } envelope');

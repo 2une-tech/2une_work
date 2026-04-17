@@ -7,12 +7,10 @@ import { useAuthStore } from '@/lib/store';
 import {
   Search,
   Home,
-  DollarSign,
-  Wallet,
+  IndianRupee,
   User,
   LogOut,
   LogIn,
-  Briefcase,
   ClipboardList,
   Menu,
   X,
@@ -30,17 +28,16 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setMobileOpen(false);
+    const t = setTimeout(() => setMobileOpen(false), 0);
+    return () => clearTimeout(t);
   }, [pathname]);
 
   const navItems = user
     ? [
         { name: 'Explore', href: '/', icon: Search },
         { name: 'Home', href: '/dashboard', icon: Home },
-        { name: 'Jobs', href: '/jobs', icon: Briefcase },
         { name: 'Tasks', href: '/tasks', icon: ClipboardList },
-        { name: 'Earnings', href: '/earnings', icon: DollarSign },
-        { name: 'Payment', href: '/payment', icon: Wallet },
+        { name: 'Earnings', href: '/earnings', icon: IndianRupee },
         { name: 'Profile', href: '/profile', icon: User },
       ]
     : [{ name: 'Explore', href: '/', icon: Search }];

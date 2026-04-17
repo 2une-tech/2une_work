@@ -17,7 +17,7 @@ export const DOMAIN_OPTIONS = [
   { label: 'Medicine', icon: '♡' },
   { label: 'Law', icon: '⚖' },
   { label: 'Data analysis', icon: '📊' },
-  { label: 'Finance', icon: '$' },
+  { label: 'Finance', icon: '₹' },
   { label: 'Business operations', icon: '💼' },
   { label: 'Life, Physical, and Social Science', icon: '🔬' },
   { label: 'Arts & Design', icon: '🎨' },

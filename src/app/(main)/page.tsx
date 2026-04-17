@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Compass, Loader2 } from 'lucide-react';
 
 import JobCard from '@/components/JobCard';
@@ -11,7 +10,6 @@ import { EmptyState } from '@/components/EmptyState';
 import { BrandLogo } from '@/components/BrandLogo';
 
 export default function ExplorePage() {
-  const router = useRouter();
   const { user } = useAuthStore();
   const { jobs, isLoading, fetchJobs } = useJobStore();
 
@@ -34,19 +32,11 @@ export default function ExplorePage() {
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Explore</h1>
           <p className="mt-1 text-sm text-muted-foreground">Open projects you can apply to.</p>
         </div>
-        {user ? (
-          <button
-            onClick={() => router.push('/jobs')}
-            className="text-sm font-medium text-primary hover:underline"
-            type="button"
-          >
-            View all
-          </button>
-        ) : (
+        {!user ? (
           <Link href="/login" className="text-sm font-medium text-primary hover:underline">
             Sign in to apply
           </Link>
-        )}
+        ) : null}
       </div>
 
       {isLoading && jobs.length === 0 ? (

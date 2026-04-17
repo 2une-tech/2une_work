@@ -4,32 +4,41 @@ import { useAuthStore } from './store';
 
 const PUBLIC_PATHS = new Set<string>(['/', '/login', '/signup', '/verify-email']);
 
+function normalizePathname(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    return pathname.slice(0, -1);
+  }
+  return pathname;
+}
+
 export function useRequireAuth() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoading, checkAuth } = useAuthStore();
+  const { user, isLoading, authReady, checkAuth } = useAuthStore();
   const didInit = useRef(false);
 
-  // Bootstrap auth once on first protected render.
+  const sessionBooting = !authReady || isLoading;
+
+  // After persisted session is loaded, validate tokens once.
   useEffect(() => {
+    if (!authReady) return;
     if (didInit.current) return;
     didInit.current = true;
     void checkAuth();
-  }, [checkAuth]);
+  }, [authReady, checkAuth]);
 
-  const isPublic = PUBLIC_PATHS.has(pathname);
+  const isPublic = PUBLIC_PATHS.has(normalizePathname(pathname));
 
   useEffect(() => {
     if (isPublic) return;
-    if (isLoading) return;
+    if (sessionBooting) return;
     if (!user) router.replace('/login');
-  }, [isPublic, isLoading, user, router]);
+  }, [isPublic, sessionBooting, user, router]);
 
   return {
     user,
-    isLoading,
-    isAllowed: isPublic || (!!user && !isLoading),
+    isLoading: sessionBooting,
+    isAllowed: isPublic || (!!user && !sessionBooting),
     isPublic,
   };
 }
-

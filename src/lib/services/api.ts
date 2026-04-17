@@ -12,7 +12,8 @@ import {
   mergeProfileFromApi,
   workingDaysToApi,
 } from './profileMap';
-import { formatPayAmount } from '@/lib/utils';
+import { formatINRRange } from '@/lib/utils';
+import { signOutFirebase } from '@/lib/firebaseClient';
 
 export { ApiRequestError };
 
@@ -70,8 +71,7 @@ function mapProjectToJob(p: ProjectApiPayload): Job {
   const max = Number.isFinite(p.payMax) ? p.payMax : (p.payPerTask ?? min);
   const unitWord = payType === 'per_hour' ? 'hour' : 'task';
   const contractLabel: Job['contractLabel'] = payType === 'per_hour' ? 'Hourly contract' : 'Per-task contract';
-  const payHeadline =
-    min === max ? `$${formatPayAmount(min)}` : `$${formatPayAmount(min)} - $${formatPayAmount(max)}`;
+  const payHeadline = formatINRRange(min, max);
   const payUnitLine = `per ${unitWord}`;
   const payRange = `${payHeadline} ${payUnitLine}`;
 
@@ -199,22 +199,17 @@ async function flushPendingFullName(): Promise<void> {
 }
 
 export const api = {
-  async signup(input: { email: string; password: string; name: string }): Promise<{
-    verificationToken?: string;
-    message: string;
-  }> {
-    const data = await apiRequest<{
-      user: { id: string; email: string };
-      verificationToken: string;
-      message: string;
-    }>('/auth/signup', {
-      method: 'POST',
-      body: { email: input.email.trim().toLowerCase(), password: input.password },
-    });
+  /**
+   * Creates a legacy user (email/password) in the API.
+   */
+  async signup(input: { email: string; password: string; name: string }): Promise<{ verificationToken?: string }> {
     if (typeof window !== 'undefined' && input.name.trim()) {
       sessionStorage.setItem(PENDING_FULL_NAME_KEY, input.name.trim());
     }
-    return { verificationToken: data.verificationToken, message: data.message };
+    return await apiRequest<{ verificationToken?: string }>('/auth/signup', {
+      method: 'POST',
+      body: { email: input.email.trim(), password: input.password },
+    });
   },
 
   async verifyEmail(token: string): Promise<void> {
@@ -243,7 +238,7 @@ export const api = {
     return session;
   },
 
-  async loginWithGoogle(idToken: string): Promise<User> {
+  async loginWithFirebase(idToken: string): Promise<User> {
     const data = await apiRequest<{
       accessToken: string;
       refreshToken: string;
@@ -286,6 +281,11 @@ export const api = {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(PENDING_FULL_NAME_KEY);
       sessionStorage.removeItem(MINIMUM_PROFILE_MODAL_DISMISSED_KEY);
+      try {
+        await signOutFirebase();
+      } catch {
+        /* ignore */
+      }
     }
   },
 
@@ -375,14 +375,22 @@ export const api = {
       });
       let name = me.email.split('@')[0] || 'User';
       let linkedinConnected = false;
+      let avatar: string | undefined;
       try {
         const bundle = await apiRequest<{
-          profile: { fullName?: string | null; linkedinConnected?: boolean | null; phone?: string | null } | null;
+          profile: {
+            fullName?: string | null;
+            linkedinConnected?: boolean | null;
+            phone?: string | null;
+            profileImageUrl?: string | null;
+          } | null;
         }>('/users/profile', {
           auth: true,
         });
         if (bundle.profile?.fullName?.trim()) name = bundle.profile.fullName.trim();
         linkedinConnected = !!bundle.profile?.linkedinConnected;
+        const pic = bundle.profile?.profileImageUrl?.trim();
+        if (pic) avatar = pic;
       } catch {
         /* ignore */
       }
@@ -396,9 +404,14 @@ export const api = {
         role: me.role as User['role'],
         isVerified: me.isVerified,
         linkedinConnected,
+        avatar,
       };
-    } catch {
-      clearTokens();
+    } catch (e) {
+      // Only drop the session when the API rejects credentials. Clearing tokens on *any* error
+      // (5xx, HTML/parse errors from a bad proxy, transient network) logged users out on every refresh.
+      if (e instanceof ApiRequestError && e.status === 401) {
+        clearTokens();
+      }
       return null;
     }
   },
@@ -474,6 +487,7 @@ export const api = {
   },
 
   async applyToJob(jobId: string, _userId: string): Promise<Application> {
+    void _userId;
     try {
       const row = await apiRequest<{
         id: string;
@@ -647,11 +661,22 @@ export const api = {
   async saveWorkerProfile(_userId: string, profile: MockWorkerProfile, activeTab: ProfileTabId): Promise<void> {
     if (activeTab === 'Resume') {
       const fullName = profile.resume.fullName.trim();
+      const educationRows = profile.resume.education.filter((e) => e.school.trim());
+      const educationSummary =
+        educationRows.length > 0
+          ? (() => {
+              const e = educationRows[0];
+              const parts = [e.degree, e.fieldOfStudy, e.school].map((x) => x.trim()).filter(Boolean);
+              const line = parts.join(' — ');
+              return line.slice(0, 200);
+            })()
+          : undefined;
       await apiRequest('/users/profile', {
         method: 'PATCH',
         auth: true,
         body: {
           ...(fullName ? { fullName } : {}),
+          ...(educationSummary ? { education: educationSummary } : {}),
           phone: profile.resume.phone.trim(),
           resumeExtras: {
             publications: profile.resume.publications
@@ -669,7 +694,23 @@ export const api = {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-      for (const name of skillParts) {
+      const normSkill = (s: string) => s.trim().toLowerCase();
+      const desiredNames = [...new Set(skillParts.map((s) => s.trim()).filter(Boolean))];
+      const desiredSet = new Set(desiredNames.map(normSkill));
+
+      let serverSkills = await apiRequest<Array<{ id: string; name: string }>>('/users/profile/skills', {
+        auth: true,
+      });
+      for (const row of serverSkills) {
+        if (!desiredSet.has(normSkill(row.name))) {
+          await apiRequest(`/users/profile/skills/${row.id}`, { method: 'DELETE', auth: true });
+        }
+      }
+      serverSkills = await apiRequest<Array<{ id: string; name: string }>>('/users/profile/skills', {
+        auth: true,
+      });
+      for (const name of desiredNames) {
+        if (serverSkills.some((s) => normSkill(s.name) === normSkill(name))) continue;
         try {
           await apiRequest('/users/profile/skills', { method: 'POST', auth: true, body: { name } });
         } catch (e) {
@@ -686,16 +727,18 @@ export const api = {
         return (profValues as readonly string[]).includes(v) ? (v as (typeof profValues)[number]) : null;
       };
       const serverLangs = await apiRequest<Array<{ id: string }>>('/users/profile/languages', { auth: true });
+      const serverLangIds = new Set(serverLangs.map((r) => r.id));
       const langRows = profile.resume.languageEntries.filter((e) => e.language.trim());
-      const keepLangIds = new Set(langRows.map((e) => e.id).filter((id) => langUuid(id)));
+      /** Only IDs that exist on the server — `newId()` is also a UUID and must not use PATCH. */
+      const keepServerIds = new Set(langRows.filter((e) => serverLangIds.has(e.id)).map((e) => e.id));
       for (const row of serverLangs) {
-        if (!keepLangIds.has(row.id)) {
+        if (!keepServerIds.has(row.id)) {
           await apiRequest(`/users/profile/languages/${row.id}`, { method: 'DELETE', auth: true });
         }
       }
       for (const e of langRows) {
         const language = e.language.trim();
-        if (langUuid(e.id)) {
+        if (serverLangIds.has(e.id)) {
           await apiRequest(`/users/profile/languages/${e.id}`, {
             method: 'PATCH',
             auth: true,
@@ -889,6 +932,38 @@ export const api = {
           minExpectedPartTimeHourly: parseInt(w.minExpectedPartTimeHourly, 10) || 0,
         },
       });
+
+      const normDomain = (s: string) => s.trim().toLowerCase();
+      const desiredDomainNames = [
+        ...new Set(
+          [
+            ...w.domainInterests.map((x) => x.trim()).filter(Boolean),
+            ...(w.domainInterestsOther.trim() ? [w.domainInterestsOther.trim()] : []),
+          ].filter(Boolean),
+        ),
+      ];
+      const desiredDomainSet = new Set(desiredDomainNames.map(normDomain));
+
+      let serverDomains = await apiRequest<Array<{ id: string; name: string }>>('/users/profile/domains', {
+        auth: true,
+      });
+      for (const row of serverDomains) {
+        if (!desiredDomainSet.has(normDomain(row.name))) {
+          await apiRequest(`/users/profile/domains/${row.id}`, { method: 'DELETE', auth: true });
+        }
+      }
+      serverDomains = await apiRequest<Array<{ id: string; name: string }>>('/users/profile/domains', {
+        auth: true,
+      });
+      for (const name of desiredDomainNames) {
+        if (serverDomains.some((d) => normDomain(d.name) === normDomain(name))) continue;
+        try {
+          await apiRequest('/users/profile/domains', { method: 'POST', auth: true, body: { name } });
+        } catch (e) {
+          if (e instanceof ApiRequestError && e.code === 'DOMAIN_EXISTS') continue;
+          throw e;
+        }
+      }
     }
 
     if (activeTab === 'Communications') {
@@ -896,6 +971,14 @@ export const api = {
         method: 'PUT',
         auth: true,
         body: profile.communications,
+      });
+    }
+
+    if (activeTab === 'Account') {
+      await apiRequest('/users/profile', {
+        method: 'PATCH',
+        auth: true,
+        body: { generativeProfilePictures: profile.account.generativeProfilePictures },
       });
     }
   },
@@ -928,6 +1011,15 @@ export const api = {
       method: 'POST',
       auth: true,
     });
+    const resumeAfter = await apiRequest<{ files: Array<{ id: string; status: string }> }>('/users/profile/resume', {
+      auth: true,
+    });
+    for (const f of resumeAfter.files ?? []) {
+      if (f.id === sasPayload.file.id || f.status === 'deleted') continue;
+      await apiRequest(`/users/profile/resume/files/${f.id}`, { method: 'DELETE', auth: true }).catch(() => {
+        /* best-effort cleanup of prior uploads */
+      });
+    }
     return { fileName: sasPayload.file.fileName };
   },
 

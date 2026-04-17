@@ -15,26 +15,25 @@ import { AuthBrand } from '@/components/AuthBrand';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
-  const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState('');
 
   useEffect(() => {
-    const t = typeof window !== 'undefined' ? sessionStorage.getItem('2une_last_verify_token') : null;
-    if (t) {
-      setToken(t);
-      sessionStorage.removeItem('2une_last_verify_token');
-    }
+    if (typeof window === 'undefined') return;
+    const pending = sessionStorage.getItem('2une_pending_verify_token')?.trim() ?? '';
+    if (pending) setToken(pending);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token.trim()) {
-      toast.error('Paste the verification token from your signup response.');
+  const handleVerify = async () => {
+    const t = token.trim();
+    if (!t) {
+      toast.error('Enter the verification token.');
       return;
     }
     setLoading(true);
     try {
-      await api.verifyEmail(token.trim());
+      await api.verifyEmail(t);
+      if (typeof window !== 'undefined') sessionStorage.removeItem('2une_pending_verify_token');
       toast.success('Email verified. You can log in.');
       router.push('/login');
     } catch (err) {
@@ -49,33 +48,36 @@ export default function VerifyEmailPage() {
       <Card className="border-border p-6 shadow-none">
         <AuthBrand
           title="Verify your email"
-          subtitle="In development, the API returns a verification token in the signup response. Paste it below."
+          subtitle="Paste the verification token you received, then continue."
         />
-        <CardContent className="p-0">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="token" className="text-xs text-muted-foreground">
-                Verification token
-              </Label>
-              <Input
-                id="token"
-                autoComplete="off"
-                placeholder="Token from signup"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                className="h-10 bg-background font-mono text-xs"
-              />
-            </div>
-            <Button type="submit" className="h-10 w-full font-medium" disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Verify
-            </Button>
-            <p className="pt-1 text-center text-sm text-muted-foreground">
-              <Link href="/login" className="font-medium text-primary hover:underline">
-                Back to log in
-              </Link>
-            </p>
-          </form>
+        <CardContent className="space-y-3 p-0 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="token" className="text-xs text-muted-foreground">
+              Verification token
+            </Label>
+            <Input
+              id="token"
+              autoComplete="one-time-code"
+              placeholder="Paste token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              className="h-10 bg-background text-sm"
+            />
+          </div>
+          <Button
+            type="button"
+            className="h-10 w-full font-medium"
+            onClick={() => void handleVerify()}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Verify email
+          </Button>
+          <p className="pt-1 text-center text-sm text-muted-foreground">
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Back to log in
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>

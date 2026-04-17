@@ -265,8 +265,8 @@ export default function AdminProjectsBulkPage() {
             <CardDescription>
               {lastResult.totalCreated} of {lastResult.totalRequested} created.
               {lastResult.totalCreated > 0 ? (
-                <Button variant="link" className="ml-1 h-auto p-0 align-baseline text-sm" onClick={() => router.push('/jobs')}>
-                  Browse projects
+                <Button variant="link" className="ml-1 h-auto p-0 align-baseline text-sm" onClick={() => router.push('/')}>
+                  Explore
                 </Button>
               ) : null}
             </CardDescription>
@@ -308,9 +308,7 @@ export default function AdminProjectsBulkPage() {
                         {r == null ? (
                           '—'
                         ) : ok ? (
-                          <Link href={`/jobs/${r.project.id}`} className="font-medium text-primary underline">
-                            Open listing
-                          </Link>
+                          <span className="font-mono text-[11px] text-muted-foreground">{r.project.id}</span>
                         ) : (
                           <span className="text-destructive">{r.message}</span>
                         )}
