@@ -4,6 +4,13 @@ import { useAuthStore } from './store';
 
 const PUBLIC_PATHS = new Set<string>(['/', '/login', '/signup', '/verify-email']);
 
+function normalizePathname(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    return pathname.slice(0, -1);
+  }
+  return pathname;
+}
+
 export function useRequireAuth() {
   const pathname = usePathname();
   const router = useRouter();
@@ -20,7 +27,7 @@ export function useRequireAuth() {
     void checkAuth();
   }, [authReady, checkAuth]);
 
-  const isPublic = PUBLIC_PATHS.has(pathname);
+  const isPublic = PUBLIC_PATHS.has(normalizePathname(pathname));
 
   useEffect(() => {
     if (isPublic) return;

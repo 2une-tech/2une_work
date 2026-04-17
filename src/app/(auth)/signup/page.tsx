@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 import { api, ApiRequestError, PENDING_FULL_NAME_KEY } from '@/lib/services/api';
 import { useAuthStore } from '@/lib/store';
-import { consumeGoogleRedirectIdToken, signInWithGoogleRedirect } from '@/lib/firebaseClient';
+import { consumeGoogleRedirectIdToken, signInWithGoogleInteractive } from '@/lib/firebaseClient';
 import { consumeLinkedinHandoffFromHash, LINKEDIN_LOGIN_ERROR_MESSAGES } from '@/lib/linkedinOAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,26 +23,22 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const redirectConsumeStarted = useRef(false);
   const linkedinHandoffStarted = useRef(false);
   const linkedinQueryErrorShown = useRef(false);
 
   useEffect(() => {
-    if (redirectConsumeStarted.current) return;
-    redirectConsumeStarted.current = true;
-
+    let cancelled = false;
     void (async () => {
       try {
         const idToken = await consumeGoogleRedirectIdToken();
-        if (!idToken) {
-          redirectConsumeStarted.current = false;
-          return;
-        }
+        if (!idToken || cancelled) return;
         setLoading(true);
         await useAuthStore.getState().loginWithFirebase(idToken);
+        if (cancelled) return;
         toast.success('Signed in with Google.');
         router.push('/dashboard');
       } catch (err) {
+        if (cancelled) return;
         if (err instanceof ApiRequestError && err.code === 'INVALID_FIREBASE_TOKEN') {
           toast.error(
             'Google sign-in could not be verified on the server. Ensure the API has FIREBASE_SERVICE_ACCOUNT_JSON for the same Firebase project as this app.',
@@ -51,10 +47,12 @@ export default function SignupPage() {
           toast.error(err instanceof Error ? err.message : 'Google sign-up failed');
         }
       } finally {
-        setLoading(false);
-        redirectConsumeStarted.current = false;
+        if (!cancelled) setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   useEffect(() => {
@@ -116,14 +114,21 @@ export default function SignupPage() {
       if (name.trim() && typeof window !== 'undefined') {
         sessionStorage.setItem(PENDING_FULL_NAME_KEY, name.trim());
       }
-      await signInWithGoogleRedirect();
+      const result = await signInWithGoogleInteractive();
+      if (result.kind === 'redirect_started') {
+        return;
+      }
+      await useAuthStore.getState().loginWithFirebase(result.idToken);
+      toast.success('Signed in with Google.');
+      router.push('/dashboard');
     } catch (err) {
-      setLoading(false);
       if (err instanceof FirebaseError && err.code === 'auth/popup-closed-by-user') {
         toast.message('Sign-in cancelled.');
         return;
       }
       toast.error(err instanceof Error ? err.message : 'Google sign-up failed');
+    } finally {
+      setLoading(false);
     }
   };
 

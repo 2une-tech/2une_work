@@ -13,9 +13,20 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { api, ApiRequestError } from '@/lib/services/api';
-import { consumeGoogleRedirectIdToken, signInWithGoogleRedirect } from '@/lib/firebaseClient';
+import {
+  consumeGoogleRedirectIdToken,
+  signInWithGoogleInteractive,
+} from '@/lib/firebaseClient';
 import { consumeLinkedinHandoffFromHash, LINKEDIN_LOGIN_ERROR_MESSAGES } from '@/lib/linkedinOAuth';
 import { AuthBrand } from '@/components/AuthBrand';
+
+/** Open-redirect safe relative path from `?next=`. */
+function readSafeNextPath(): string {
+  if (typeof window === 'undefined') return '';
+  const n = new URLSearchParams(window.location.search).get('next')?.trim() ?? '';
+  if (!n.startsWith('/') || n.startsWith('//')) return '';
+  return n;
+}
 
 export default function LoginPage() {
   const { login, loginWithLinkedinHandoff } = useAuthStore();
@@ -23,38 +34,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  /** Avoid duplicate getRedirectResult under React Strict Mode (second mount must not run). */
-  const redirectConsumeStarted = useRef(false);
   const linkedinHandoffStarted = useRef(false);
   const linkedinQueryErrorShown = useRef(false);
 
-  const nextPath = (() => {
-    if (typeof window === 'undefined') return '';
-    const q = new URLSearchParams(window.location.search);
-    const n = q.get('next') ?? '';
-    if (!n.trim()) return '';
-    if (!n.startsWith('/')) return '';
-    // Prevent open redirects: only allow relative paths within this app.
-    if (n.startsWith('//')) return '';
-    return n;
-  })();
-
   useEffect(() => {
-    if (redirectConsumeStarted.current) return;
-    redirectConsumeStarted.current = true;
-
+    let cancelled = false;
     void (async () => {
       try {
         const idToken = await consumeGoogleRedirectIdToken();
-        if (!idToken) {
-          redirectConsumeStarted.current = false;
-          return;
-        }
+        if (!idToken || cancelled) return;
         setLoading(true);
         await useAuthStore.getState().loginWithFirebase(idToken);
+        if (cancelled) return;
         toast.success('Logged in successfully.');
-        router.push(nextPath || '/dashboard');
+        router.push(readSafeNextPath() || '/dashboard');
       } catch (err) {
+        if (cancelled) return;
         if (err instanceof ApiRequestError && err.code === 'INVALID_FIREBASE_TOKEN') {
           toast.error(
             'Google sign-in could not be verified on the server. Ensure the API has FIREBASE_SERVICE_ACCOUNT_JSON for the same Firebase project as this app.',
@@ -63,10 +58,12 @@ export default function LoginPage() {
           toast.error(err instanceof Error ? err.message : 'Google sign-in failed');
         }
       } finally {
-        setLoading(false);
-        redirectConsumeStarted.current = false;
+        if (!cancelled) setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   useEffect(() => {
@@ -79,7 +76,7 @@ export default function LoginPage() {
         setLoading(true);
         await loginWithLinkedinHandoff(token);
         toast.success('Logged in successfully.');
-        router.push(nextPath || '/dashboard');
+        router.push(readSafeNextPath() || '/dashboard');
       } catch (err) {
         if (err instanceof ApiRequestError && err.code === 'INVALID_LINKEDIN_HANDOFF') {
           toast.error('Sign-in session expired. Try LinkedIn again.');
@@ -116,7 +113,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success('Logged in successfully.');
-      router.push(nextPath || '/dashboard');
+      router.push(readSafeNextPath() || '/dashboard');
     } catch (err) {
       if (err instanceof FirebaseError) {
         if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
@@ -161,14 +158,21 @@ export default function LoginPage() {
   const runGoogleSignIn = async () => {
     setLoading(true);
     try {
-      await signInWithGoogleRedirect();
+      const result = await signInWithGoogleInteractive();
+      if (result.kind === 'redirect_started') {
+        return;
+      }
+      await useAuthStore.getState().loginWithFirebase(result.idToken);
+      toast.success('Logged in successfully.');
+      router.push(readSafeNextPath() || '/dashboard');
     } catch (err) {
-      setLoading(false);
       if (err instanceof FirebaseError && err.code === 'auth/popup-closed-by-user') {
         toast.message('Sign-in cancelled.');
         return;
       }
       toast.error(err instanceof Error ? err.message : 'Google sign-in failed');
+    } finally {
+      setLoading(false);
     }
   };
 
