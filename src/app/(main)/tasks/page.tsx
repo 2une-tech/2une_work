@@ -50,12 +50,9 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (!authReady || authSessionLoading) return;
-    if (!user) {
-      router.replace('/login');
-      return;
-    }
+    if (!user) return;
     void loadList();
-  }, [authReady, authSessionLoading, user, router, loadList]);
+  }, [authReady, authSessionLoading, user, loadList]);
 
   const claimNext = async () => {
     try {

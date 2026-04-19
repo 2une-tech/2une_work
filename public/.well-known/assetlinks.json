@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.tune.work",
+      "sha256_cert_fingerprints": ["C0:E2:67:85:5E:66:9F:E8:05:2A:42:A2:4F:83:5B:03:71:81:02:3F:03:49:25:80:8F:27:60:12:27:0D:1D:06"]
+    }
+  }
+]

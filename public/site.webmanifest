@@ -1,0 +1,17 @@
+{
+  "name": "2une — AI data work & projects",
+  "short_name": "2une",
+  "description": "Train AI with data sourcing, annotation, and RLHF. Find flexible projects and apply to work with 2une.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#3f4f5c",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

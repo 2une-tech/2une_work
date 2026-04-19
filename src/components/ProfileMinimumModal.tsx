@@ -14,6 +14,7 @@ import { LANGUAGE_CATALOG, profileLanguageLabel } from '@/lib/languagesCatalog';
 import { PROFICIENCY_LEVELS, PROF_SELECT_NONE } from '@/components/profile/constants';
 import type { LanguageProficiencyLevel } from '@/types/profile';
 import { newId } from '@/types/profile';
+import { validateRequiredPhoneParts } from '@/lib/phoneValidation';
 import {
   Dialog,
   DialogContent,
@@ -60,7 +61,9 @@ export function ProfileMinimumModal() {
   } | null>(null);
   const [loadingGap, setLoadingGap] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [phone, setPhone] = useState('');
+  /** Dial code label (e.g. 🇮🇳 +91); national digits go in `phoneNational`. */
+  const [phoneCountry, setPhoneCountry] = useState('🇮🇳 +91');
+  const [phoneNational, setPhoneNational] = useState('');
   const [languageRows, setLanguageRows] = useState<ModalLangRow[]>([emptyLangRow()]);
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [linkedinImporting, setLinkedinImporting] = useState(false);
@@ -113,7 +116,8 @@ export function ProfileMinimumModal() {
   const wasOpenRef = useRef(false);
   useEffect(() => {
     if (open && !wasOpenRef.current) {
-      setPhone('');
+      setPhoneCountry('🇮🇳 +91');
+      setPhoneNational('');
       setLanguageRows([emptyLangRow()]);
       setLinkedinUrl('');
     }
@@ -168,10 +172,14 @@ export function ProfileMinimumModal() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!gap) return;
-    const trimmedPhone = phone.trim();
-    if (gap.missingPhone && !trimmedPhone) {
-      toast.error('Enter your phone number.');
-      return;
+    let phoneE164: string | undefined;
+    if (gap.missingPhone) {
+      const pv = validateRequiredPhoneParts(phoneCountry, phoneNational);
+      if (!pv.ok) {
+        toast.error(pv.message);
+        return;
+      }
+      phoneE164 = pv.e164;
     }
 
     const resolvedLanguages: Array<{ language: string; speakLevel?: string; writeLevel?: string }> = [];
@@ -196,7 +204,7 @@ export function ProfileMinimumModal() {
     setSaving(true);
     try {
       await api.saveMinimumProfileDetails({
-        ...(gap.missingPhone ? { phone: trimmedPhone } : {}),
+        ...(gap.missingPhone && phoneE164 ? { phone: phoneE164 } : {}),
         ...(gap.missingLanguages && resolvedLanguages.length > 0 ? { languages: resolvedLanguages } : {}),
       });
       toast.success('Profile updated.');
@@ -257,19 +265,35 @@ export function ProfileMinimumModal() {
           <div className="grid gap-4 py-2">
             {gap.missingPhone ? (
               <div className="space-y-2">
-                <Label htmlFor="minimum-profile-phone" className="text-xs text-muted-foreground">
-                  Phone number
-                </Label>
-                <Input
-                  id="minimum-profile-phone"
-                  type="tel"
-                  autoComplete="tel"
-                  placeholder="Your mobile number"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  maxLength={40}
-                  className="h-10 bg-background text-sm"
-                />
+                <Label className="text-xs text-muted-foreground">Phone number</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Country code and national number (8–15 digits total with country), or type the full number starting
+                  with + in the second field.
+                </p>
+                <div className="flex max-w-md gap-0">
+                  <Input
+                    id="minimum-profile-phone-cc"
+                    type="text"
+                    autoComplete="tel-country-code"
+                    placeholder="+91"
+                    value={phoneCountry}
+                    onChange={(e) => setPhoneCountry(e.target.value)}
+                    maxLength={32}
+                    className="h-10 w-[108px] shrink-0 rounded-r-none border-border bg-muted/50 text-sm"
+                    aria-label="Country or dial code"
+                  />
+                  <Input
+                    id="minimum-profile-phone"
+                    type="tel"
+                    autoComplete="tel-national"
+                    placeholder="National number or full +…"
+                    value={phoneNational}
+                    onChange={(e) => setPhoneNational(e.target.value)}
+                    maxLength={24}
+                    className="h-10 min-w-0 flex-1 rounded-l-none border-border bg-background text-sm"
+                    inputMode="tel"
+                  />
+                </div>
               </div>
             ) : null}
 

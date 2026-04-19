@@ -89,7 +89,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!authReady || authSessionLoading) return;
     if (!userId) {
-      router.replace('/login');
+      setLoading(false);
       return;
     }
     let cancelled = false;

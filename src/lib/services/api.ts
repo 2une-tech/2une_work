@@ -14,6 +14,7 @@ import {
 } from './profileMap';
 import { formatINRRange } from '@/lib/utils';
 import { signOutFirebase } from '@/lib/firebaseClient';
+import { formatPhoneForApi, validateRequiredPhoneParts } from '@/lib/phoneValidation';
 
 export { ApiRequestError };
 
@@ -202,11 +203,11 @@ export const api = {
   /**
    * Creates a legacy user (email/password) in the API.
    */
-  async signup(input: { email: string; password: string; name: string }): Promise<{ verificationToken?: string }> {
+  async signup(input: { email: string; password: string; name: string }): Promise<{ message?: string }> {
     if (typeof window !== 'undefined' && input.name.trim()) {
       sessionStorage.setItem(PENDING_FULL_NAME_KEY, input.name.trim());
     }
-    return await apiRequest<{ verificationToken?: string }>('/auth/signup', {
+    return await apiRequest<{ message?: string }>('/auth/signup', {
       method: 'POST',
       body: { email: input.email.trim(), password: input.password },
     });
@@ -323,10 +324,14 @@ export const api = {
     const profForPost = (v: string) => ((profValues as readonly string[]).includes(v) ? v : undefined);
 
     if (phone) {
+      const pv = validateRequiredPhoneParts('', phone);
+      if (!pv.ok) {
+        throw new ApiRequestError(400, 'VALIDATION_ERROR', pv.message);
+      }
       await apiRequest('/users/profile', {
         method: 'PATCH',
         auth: true,
-        body: { phone: phone.slice(0, 40) },
+        body: { phone: pv.e164.slice(0, 40) },
       });
     }
     for (const row of input.languages ?? []) {
@@ -671,13 +676,15 @@ export const api = {
               return line.slice(0, 200);
             })()
           : undefined;
+      const phonePayload = formatPhoneForApi(profile.resume.phoneCountryLabel, profile.resume.phone);
+
       await apiRequest('/users/profile', {
         method: 'PATCH',
         auth: true,
         body: {
           ...(fullName ? { fullName } : {}),
           ...(educationSummary ? { education: educationSummary } : {}),
-          phone: profile.resume.phone.trim(),
+          phone: phonePayload,
           resumeExtras: {
             publications: profile.resume.publications
               .map(({ id, text }) => ({ id, text: text.trim() }))

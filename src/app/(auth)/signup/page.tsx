@@ -10,8 +10,9 @@ import { api, ApiRequestError, PENDING_FULL_NAME_KEY } from '@/lib/services/api'
 import { useAuthStore } from '@/lib/store';
 import { consumeGoogleRedirectIdToken, signInWithGoogleInteractive } from '@/lib/firebaseClient';
 import { consumeLinkedinHandoffFromHash, LINKEDIN_LOGIN_ERROR_MESSAGES } from '@/lib/linkedinOAuth';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AuthBrand } from '@/components/AuthBrand';
@@ -92,12 +93,10 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await api.signup({ email, password, name });
-      if (res?.verificationToken && typeof window !== 'undefined') {
-        sessionStorage.setItem('2une_pending_verify_token', res.verificationToken);
-      }
-      toast.success('Check your inbox—we sent a verification link.');
-      router.push('/verify-email');
+      await api.signup({ email, password, name });
+      await useAuthStore.getState().login(email, password);
+      toast.success('Account created. Welcome!');
+      router.push('/dashboard');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Signup failed';
       toast.error(message);
@@ -153,7 +152,7 @@ export default function SignupPage() {
       <Card className="border-border p-6 shadow-none">
         <AuthBrand
           title="Create your account"
-          subtitle="We’ll email you a link to verify your address before you can sign in."
+          subtitle="Sign up with email or continue with Google or LinkedIn."
         />
         <CardContent className="p-0">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -268,6 +267,18 @@ export default function SignupPage() {
                 Log in
               </Link>
             </p>
+
+            <div className="flex justify-center pt-2">
+              <Link
+                href="/"
+                className={cn(
+                  buttonVariants({ variant: 'ghost' }),
+                  'h-9 px-3 text-sm font-normal text-muted-foreground hover:text-foreground',
+                )}
+              >
+                Browse projects without signing in
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>

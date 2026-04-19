@@ -1,4 +1,5 @@
 import type { MockWorkerProfile, ProfileTabId } from '@/types/profile';
+import { validateOptionalPhoneParts } from '@/lib/phoneValidation';
 
 function emailOk(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
@@ -10,6 +11,8 @@ export function validateProfileTab(tab: ProfileTabId, p: MockWorkerProfile): str
       if (!p.resume.fullName.trim()) return 'Full name is required.';
       if (!p.resume.displayEmail.trim() || !emailOk(p.resume.displayEmail))
         return 'A valid email is required.';
+      const phoneCheck = validateOptionalPhoneParts(p.resume.phoneCountryLabel, p.resume.phone);
+      if (!phoneCheck.ok) return phoneCheck.message;
       return null;
     }
     case 'Location & Work authorization': {

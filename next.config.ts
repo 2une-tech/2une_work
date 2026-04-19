@@ -11,6 +11,18 @@ import type { NextConfig } from 'next';
 const API_ORIGIN = (process.env.API_PROXY_TARGET ?? 'http://api.2une.in').replace(/\/$/, '');
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: '/.well-known/apple-app-site-association',
+        headers: [{ key: 'Content-Type', value: 'application/json' }],
+      },
+      {
+        source: '/.well-known/assetlinks.json',
+        headers: [{ key: 'Content-Type', value: 'application/json' }],
+      },
+    ];
+  },
   async rewrites() {
     return [
       { source: '/auth/:path*', destination: `${API_ORIGIN}/auth/:path*` },

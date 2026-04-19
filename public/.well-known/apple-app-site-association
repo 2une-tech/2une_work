@@ -1,0 +1,22 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "XL3SYYVPW7.com.tunee.work",
+        "paths": [
+          "/project/*",
+          "/projects",
+          "/dashboard",
+          "/earnings",
+          "/profile",
+          "/login",
+          "/signup",
+          "/verify-email",
+          "/onboarding",
+          "/notifications"
+        ]
+      }
+    ]
+  }
+}

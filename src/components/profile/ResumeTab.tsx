@@ -65,20 +65,28 @@ export function ResumeTab({ profile, setProfile, authEmail }: Props) {
 
         <div>
           <label className="text-[13px] font-bold text-foreground block mb-1">Phone</label>
+          <p className="text-[11px] text-muted-foreground mb-2 max-w-md leading-relaxed">
+            Country code and national number (8–15 digits total with country), or enter the full international number
+            starting with + in the second field. Leave both empty if you prefer not to add a phone yet.
+          </p>
           <div className="flex max-w-md">
             <Input
               value={r.phoneCountryLabel}
               onChange={(e) => setResume({ phoneCountryLabel: e.target.value })}
               className="h-9 w-[100px] rounded-r-none border-border bg-muted/50 text-[13px] shrink-0"
               placeholder="+91"
+              maxLength={32}
+              autoComplete="tel-country-code"
               aria-label="Country or dial code"
             />
             <Input
               value={r.phone}
               onChange={(e) => setResume({ phone: e.target.value })}
               className="h-9 rounded-l-none border-border bg-background text-[13px] flex-1"
-              placeholder="Phone number"
+              placeholder="National number or full +…"
               inputMode="tel"
+              maxLength={24}
+              autoComplete="tel-national"
             />
           </div>
         </div>

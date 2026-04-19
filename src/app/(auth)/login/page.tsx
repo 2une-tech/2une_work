@@ -1,14 +1,14 @@
 'use client';
 
 import { FirebaseError } from 'firebase/app';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -20,15 +20,23 @@ import {
 import { consumeLinkedinHandoffFromHash, LINKEDIN_LOGIN_ERROR_MESSAGES } from '@/lib/linkedinOAuth';
 import { AuthBrand } from '@/components/AuthBrand';
 
-/** Open-redirect safe relative path from `?next=`. */
-function readSafeNextPath(): string {
-  if (typeof window === 'undefined') return '';
-  const n = new URLSearchParams(window.location.search).get('next')?.trim() ?? '';
+/** Open-redirect safe relative path from a raw `next` query value. */
+function readSafeNextParam(next: string | null): string {
+  const n = next?.trim() ?? '';
   if (!n.startsWith('/') || n.startsWith('//')) return '';
   return n;
 }
 
-export default function LoginPage() {
+/** Open-redirect safe relative path from `?next=` in the current URL. */
+function readSafeNextPath(): string {
+  if (typeof window === 'undefined') return '';
+  return readSafeNextParam(new URLSearchParams(window.location.search).get('next'));
+}
+
+function LoginCard() {
+  const searchParams = useSearchParams();
+  const pendingNext = useMemo(() => readSafeNextParam(searchParams.get('next')), [searchParams]);
+
   const { login, loginWithLinkedinHandoff } = useAuthStore();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -178,6 +186,11 @@ export default function LoginPage() {
       <Card className="border-border p-6 shadow-none">
         <AuthBrand title="Sign in to 2une" />
         <CardContent className="p-0">
+          {pendingNext ? (
+            <p className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Sign in to continue what you started. After you log in, you will return to that page.
+            </p>
+          ) : null}
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs text-muted-foreground">
@@ -277,6 +290,18 @@ export default function LoginPage() {
             </div>
           </form>
 
+          <div className="mt-4 flex justify-center">
+            <Link
+              href="/"
+              className={cn(
+                buttonVariants({ variant: 'ghost' }),
+                'h-9 px-3 text-sm font-normal text-muted-foreground hover:text-foreground',
+              )}
+            >
+              Browse projects without signing in
+            </Link>
+          </div>
+
           <p className="mt-6 text-center text-xs text-muted-foreground">
             By signing in, you agree to our{' '}
             <Link href="#" className="underline underline-offset-2">
@@ -287,5 +312,25 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function LoginPageFallback() {
+  return (
+    <div className="w-full max-w-md">
+      <Card className="border-border p-6 shadow-none">
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginCard />
+    </Suspense>
   );
 }

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ErrorState';
 import { Markdown } from '@/components/Markdown';
 import { splitMarkdownSections } from '@/lib/markdownSections';
+import { toast } from 'sonner';
 
 function routeJobId(raw: ReturnType<typeof useParams>['jobId']): string {
   if (typeof raw === 'string' && raw.trim()) return raw.trim();
@@ -30,8 +31,20 @@ export default function ProjectDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const applyHref = useMemo(() => `/interview/${jobId}`, [jobId]);
   const loginHref = useMemo(() => `/login?next=${encodeURIComponent(`/project/${jobId}`)}`, [jobId]);
+  const [applicationStatus, setApplicationStatus] = useState<
+    | {
+        id: string;
+        status: 'applied' | 'under_review' | 'interview_pending' | 'approved' | 'rejected';
+        interviewScore?: number | null;
+        rejectionReason?: string | null;
+        createdAt: string;
+        updatedAt: string;
+      }
+    | null
+  >(null);
+  const [applicationLoading, setApplicationLoading] = useState(false);
+  const [applicationErr, setApplicationErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!jobId) return;
@@ -59,6 +72,31 @@ export default function ProjectDetailsPage() {
       cancelled = true;
     };
   }, [jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    if (!authReady || authSessionLoading) return;
+    let cancelled = false;
+    (async () => {
+      setApplicationErr(null);
+      if (!user) {
+        setApplicationStatus(null);
+        return;
+      }
+      try {
+        const status = await api.getProjectApplicationStatus(jobId);
+        if (cancelled) return;
+        setApplicationStatus(status);
+      } catch (e) {
+        if (cancelled) return;
+        setApplicationErr(e instanceof Error ? e.message : 'Failed to load application status');
+        setApplicationStatus(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, user, authReady, authSessionLoading]);
 
   if (!jobId) {
     return (
@@ -97,6 +135,8 @@ export default function ProjectDetailsPage() {
   const requirementChips = Array.from(
     new Set([job.category, ...(job.skillsRequired ?? [])].map((s) => String(s).trim()).filter(Boolean)),
   ).slice(0, 10);
+
+  const isApplied = applicationStatus != null;
 
   return (
     <div className="mx-auto min-h-screen max-w-6xl bg-background px-6 py-8 md:px-8">
@@ -139,17 +179,33 @@ export default function ProjectDetailsPage() {
             <span className="font-normal text-muted-foreground">{job.payUnitLine}</span>
           </div>
           <Button
-            onClick={() => {
+            onClick={async () => {
               if (!authReady || authSessionLoading) return;
               if (!user) {
                 router.push(loginHref);
                 return;
               }
-              router.push(applyHref);
+              if (isApplied || applicationLoading) return;
+              setApplicationLoading(true);
+              setApplicationErr(null);
+              try {
+                await api.applyToJob(jobId, user.id);
+                const status = await api.getProjectApplicationStatus(jobId);
+                setApplicationStatus(status);
+                toast.success('Applied');
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : 'Failed to apply';
+                setApplicationErr(msg);
+                toast.error(msg);
+              } finally {
+                setApplicationLoading(false);
+              }
             }}
             className="gap-1"
+            disabled={isApplied || applicationLoading}
           >
-            Apply <ArrowUpRight className="h-4 w-4" />
+            {isApplied ? 'Applied' : applicationLoading ? 'Applying…' : 'Apply'}{' '}
+            <ArrowUpRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -217,22 +273,48 @@ export default function ProjectDetailsPage() {
               <span className="font-normal text-muted-foreground">{job.payUnitLine}</span>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Apply to start the next step. If selected, you may be asked to complete a short interview.
+              {isApplied
+                ? 'You already applied to this project. Check your dashboard for updates.'
+                : 'Apply to submit your application. You can track status on your dashboard.'}
             </p>
+            {applicationErr ? (
+              <p className="mt-3 text-sm text-destructive">{applicationErr}</p>
+            ) : null}
             <div className="mt-4 flex flex-col gap-2">
               <Button
-                onClick={() => {
+                onClick={async () => {
                   if (!authReady || authSessionLoading) return;
                   if (!user) {
                     router.push(loginHref);
                     return;
                   }
-                  router.push(applyHref);
+                  if (isApplied || applicationLoading) return;
+                  setApplicationLoading(true);
+                  setApplicationErr(null);
+                  try {
+                    await api.applyToJob(jobId, user.id);
+                    const status = await api.getProjectApplicationStatus(jobId);
+                    setApplicationStatus(status);
+                    toast.success('Applied');
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : 'Failed to apply';
+                    setApplicationErr(msg);
+                    toast.error(msg);
+                  } finally {
+                    setApplicationLoading(false);
+                  }
                 }}
                 className="gap-1"
+                disabled={isApplied || applicationLoading}
               >
-                Apply <ArrowUpRight className="h-4 w-4" />
+                {isApplied ? 'Applied' : applicationLoading ? 'Applying…' : 'Apply'}{' '}
+                <ArrowUpRight className="h-4 w-4" />
               </Button>
+              {user && isApplied ? (
+                <Button variant="outline" onClick={() => router.push('/dashboard')}>
+                  Go to dashboard
+                </Button>
+              ) : null}
               <Button variant="outline" onClick={() => router.push('/')}>
                 Explore more
               </Button>

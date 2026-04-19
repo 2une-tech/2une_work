@@ -1,44 +1,28 @@
-import { useEffect, useRef } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from './store';
+import { isMainGuestRoute } from './mainGuestRoutes';
 
-const PUBLIC_PATHS = new Set<string>(['/', '/login', '/signup', '/verify-email']);
-
-function normalizePathname(pathname: string): string {
-  if (pathname.length > 1 && pathname.endsWith('/')) {
-    return pathname.slice(0, -1);
-  }
-  return pathname;
-}
-
+/**
+ * Auth state for pages under the (main) layout. Guest redirects are handled by MainLayoutGate.
+ */
 export function useRequireAuth() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, isLoading, authReady, checkAuth } = useAuthStore();
-  const didInit = useRef(false);
+  const { user, isLoading, authReady } = useAuthStore();
 
   const sessionBooting = !authReady || isLoading;
 
-  // After persisted session is loaded, validate tokens once.
-  useEffect(() => {
-    if (!authReady) return;
-    if (didInit.current) return;
-    didInit.current = true;
-    void checkAuth();
-  }, [authReady, checkAuth]);
+  const isGuestRoute = pathname ? isMainGuestRoute(pathname) : false;
 
-  const isPublic = PUBLIC_PATHS.has(normalizePathname(pathname));
-
-  useEffect(() => {
-    if (isPublic) return;
-    if (sessionBooting) return;
-    if (!user) router.replace('/login');
-  }, [isPublic, sessionBooting, user, router]);
+  const isAllowed = useMemo(
+    () => isGuestRoute || (!!user && !sessionBooting),
+    [isGuestRoute, user, sessionBooting],
+  );
 
   return {
     user,
     isLoading: sessionBooting,
-    isAllowed: isPublic || (!!user && !sessionBooting),
-    isPublic,
+    isAllowed,
+    isPublic: isGuestRoute,
   };
 }
