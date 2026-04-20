@@ -1,11 +1,16 @@
+import { MobileAppBanner } from '@/components/MobileAppBanner';
+
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 px-4 py-10">
-      {children}
+    <div className="flex min-h-screen flex-col bg-muted/40">
+      <MobileAppBanner />
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+        {children}
+      </div>
     </div>
   );
 }
