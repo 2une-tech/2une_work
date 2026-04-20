@@ -1,10 +1,16 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.tune.work",
-      "sha256_cert_fingerprints": ["C0:E2:67:85:5E:66:9F:E8:05:2A:42:A2:4F:83:5B:03:71:81:02:3F:03:49:25:80:8F:27:60:12:27:0D:1D:06"]
+      "sha256_cert_fingerprints": [
+        "C0:E2:67:85:5E:66:9F:E8:05:2A:42:A2:4F:83:5B:03:71:81:02:3F:03:49:25:80:8F:27:60:12:27:0D:1D:06",
+        "07:59:53:F5:70:D1:73:52:5E:EA:86:FC:A5:C5:29:78:E0:B4:3A:BD:22:49:9D:FF:85:3E:76:83:B7:DD:F1:0A"
+      ]
     }
   }
 ]
