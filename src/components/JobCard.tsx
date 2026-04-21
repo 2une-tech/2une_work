@@ -2,7 +2,7 @@
 
 import type { Job } from '@/types';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { JobShareButton } from '@/components/JobShareButton';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -37,13 +37,22 @@ export default function JobCard(props: { job: Job; className?: string }) {
           {job.title}
         </h3>
 
-        <Link
-          href={applyHref}
-          onClick={(e) => e.stopPropagation()}
-          className="shrink-0 inline-flex items-center gap-1 text-[13px] font-medium text-primary opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 hover:underline"
-        >
-          Apply <ArrowUpRight className="h-3.5 w-3.5" />
-        </Link>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <JobShareButton
+            jobId={job.id}
+            jobTitle={job.title}
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:focus-visible:opacity-100"
+          />
+          <Link
+            href={applyHref}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium text-primary opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 hover:underline"
+          >
+            Apply <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
 
       <div className="mt-1 text-[13px] text-muted-foreground">

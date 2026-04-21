@@ -9,7 +9,7 @@ export function MobileAppBanner({ className }: { className?: string }) {
       role="region"
       aria-label="Download the 2une mobile app"
       className={cn(
-        'border-b border-border bg-muted/60 px-4 py-2.5 text-foreground md:px-6',
+        'sticky top-14 z-40 w-full self-start border-b border-border bg-background/95 px-4 py-2.5 text-foreground shadow-sm backdrop-blur-md supports-backdrop-filter:bg-background/80 md:top-0 md:px-6',
         className,
       )}
     >

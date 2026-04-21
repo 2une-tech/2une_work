@@ -6,6 +6,7 @@
         "appID": "XL3SYYVPW7.com.tunee.work",
         "paths": [
           "/project/*",
+          "/worker-terms",
           "/projects",
           "/dashboard",
           "/earnings",

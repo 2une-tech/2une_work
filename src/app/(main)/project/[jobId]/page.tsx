@@ -5,6 +5,9 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowUpRight, ChevronLeft, Loader2, Sparkles } from 'lucide-react';
 
+import { JobShareButton } from '@/components/JobShareButton';
+import { ContractPaymentTermsSection } from '@/components/ContractPaymentTermsSection';
+
 import { api } from '@/lib/services/api';
 import { useAuthStore } from '@/lib/store';
 import type { Job } from '@/types';
@@ -13,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ErrorState';
 import { Markdown } from '@/components/Markdown';
 import { splitMarkdownSections } from '@/lib/markdownSections';
+import { mergeRequiredProjectFaqMarkdown } from '@/lib/projectFaqDefaults';
 import { toast } from 'sonner';
 
 function routeJobId(raw: ReturnType<typeof useParams>['jobId']): string {
@@ -131,6 +135,7 @@ export default function ProjectDetailsPage() {
   const requirementsMd = sections.requirements ?? '';
   const timelineMd = sections.timeline ?? '';
   const faqMd = sections.faq ?? '';
+  const mergedFaqMd = mergeRequiredProjectFaqMarkdown(faqMd);
 
   const requirementChips = Array.from(
     new Set([job.category, ...(job.skillsRequired ?? [])].map((s) => String(s).trim()).filter(Boolean)),
@@ -178,35 +183,38 @@ export default function ProjectDetailsPage() {
             {job.payHeadline}{' '}
             <span className="font-normal text-muted-foreground">{job.payUnitLine}</span>
           </div>
-          <Button
-            onClick={async () => {
-              if (!authReady || authSessionLoading) return;
-              if (!user) {
-                router.push(loginHref);
-                return;
-              }
-              if (isApplied || applicationLoading) return;
-              setApplicationLoading(true);
-              setApplicationErr(null);
-              try {
-                await api.applyToJob(jobId, user.id);
-                const status = await api.getProjectApplicationStatus(jobId);
-                setApplicationStatus(status);
-                toast.success('Applied');
-              } catch (e) {
-                const msg = e instanceof Error ? e.message : 'Failed to apply';
-                setApplicationErr(msg);
-                toast.error(msg);
-              } finally {
-                setApplicationLoading(false);
-              }
-            }}
-            className="gap-1"
-            disabled={isApplied || applicationLoading}
-          >
-            {isApplied ? 'Applied' : applicationLoading ? 'Applying…' : 'Apply'}{' '}
-            <ArrowUpRight className="h-4 w-4" />
-          </Button>
+          <div className="flex w-full flex-wrap items-center gap-2 md:justify-end">
+            <JobShareButton jobId={jobId} jobTitle={job.title} variant="outline" size="sm" />
+            <Button
+              onClick={async () => {
+                if (!authReady || authSessionLoading) return;
+                if (!user) {
+                  router.push(loginHref);
+                  return;
+                }
+                if (isApplied || applicationLoading) return;
+                setApplicationLoading(true);
+                setApplicationErr(null);
+                try {
+                  await api.applyToJob(jobId, user.id);
+                  const status = await api.getProjectApplicationStatus(jobId);
+                  setApplicationStatus(status);
+                  toast.success('Applied');
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : 'Failed to apply';
+                  setApplicationErr(msg);
+                  toast.error(msg);
+                } finally {
+                  setApplicationLoading(false);
+                }
+              }}
+              className="gap-1"
+              disabled={isApplied || applicationLoading}
+            >
+              {isApplied ? 'Applied' : applicationLoading ? 'Applying…' : 'Apply'}{' '}
+              <ArrowUpRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -258,12 +266,14 @@ export default function ProjectDetailsPage() {
 
           <section className="rounded-xl border border-border bg-card p-5">
             <h2 className="text-sm font-semibold text-foreground">FAQ</h2>
-            {faqMd.trim() ? (
-              <Markdown markdown={faqMd} className="mt-3" />
-            ) : (
-              <p className="mt-3 text-sm text-muted-foreground">No FAQs yet.</p>
-            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Common questions for every 2une project. Your project may add more below the divider when
+              the listing includes a custom FAQ.
+            </p>
+            <Markdown markdown={mergedFaqMd} className="mt-3" />
           </section>
+
+          <ContractPaymentTermsSection id="project-contract-payment-terms-heading" />
         </div>
 
         <aside className="md:col-span-1">
@@ -281,6 +291,12 @@ export default function ProjectDetailsPage() {
               <p className="mt-3 text-sm text-destructive">{applicationErr}</p>
             ) : null}
             <div className="mt-4 flex flex-col gap-2">
+              <JobShareButton
+                jobId={jobId}
+                jobTitle={job.title}
+                variant="outline"
+                className="w-full justify-center gap-1.5"
+              />
               <Button
                 onClick={async () => {
                   if (!authReady || authSessionLoading) return;

@@ -14,6 +14,7 @@ export function isMainGuestRoute(pathname: string): boolean {
   if (!pathname) return false;
   const p = normalizePathname(pathname);
   if (p === '/') return true;
+  if (p === '/worker-terms') return true;
   if (p.startsWith('/project/')) return true;
   return false;
 }

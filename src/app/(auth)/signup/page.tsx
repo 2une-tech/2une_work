@@ -261,6 +261,14 @@ export default function SignupPage() {
               </Button>
             </div>
 
+            <p className="pt-4 text-center text-xs text-muted-foreground">
+              By creating an account, you agree to our{' '}
+              <Link href="/worker-terms" className="underline underline-offset-2">
+                Worker Terms
+              </Link>
+              .
+            </p>
+
             <p className="pt-1 text-center text-sm text-muted-foreground">
               Already have an account?{' '}
               <Link href="/login" className="font-medium text-primary hover:underline">

@@ -304,7 +304,7 @@ function LoginCard() {
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
             By signing in, you agree to our{' '}
-            <Link href="#" className="underline underline-offset-2">
+            <Link href="/worker-terms" className="underline underline-offset-2">
               Worker Terms
             </Link>
             .
