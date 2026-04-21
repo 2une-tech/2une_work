@@ -121,8 +121,16 @@ export const useJobStore = create<JobState>((set) => ({
   fetchJobs: async (filters) => {
     set({ isLoading: true });
     try {
-      const jobs = await api.getJobs(1, 50, filters);
-      set({ jobs, isLoading: false });
+      const pageSize = 100;
+      const acc: Job[] = [];
+      let page = 1;
+      while (true) {
+        const { jobs, total } = await api.getJobsPage(page, pageSize, filters);
+        acc.push(...jobs);
+        if (acc.length >= total || jobs.length === 0) break;
+        page += 1;
+      }
+      set({ jobs: acc, isLoading: false });
     } catch (e) {
       console.error('[jobs]', e);
       set({ jobs: [], isLoading: false });

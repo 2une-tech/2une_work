@@ -441,15 +441,34 @@ export const api = {
     };
   },
 
+  async getJobsPage(
+    page = 1,
+    limit = 30,
+    filters?: { payType?: 'per_hour' | 'per_task' },
+  ): Promise<{ jobs: Job[]; total: number; page: number; limit: number }> {
+    const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (filters?.payType) qs.set('payType', filters.payType);
+    const data = await apiRequest<{
+      items: ProjectApiPayload[];
+      total: number;
+      page?: number;
+      limit?: number;
+    }>(`/projects?${qs}`);
+    return {
+      jobs: (data.items ?? []).map(mapProjectToJob),
+      total: typeof data.total === 'number' && Number.isFinite(data.total) ? data.total : 0,
+      page: data.page ?? page,
+      limit: data.limit ?? limit,
+    };
+  },
+
   async getJobs(
     page = 1,
     limit = 50,
     filters?: { payType?: 'per_hour' | 'per_task' },
   ): Promise<Job[]> {
-    const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
-    if (filters?.payType) qs.set('payType', filters.payType);
-    const data = await apiRequest<{ items: ProjectApiPayload[]; total: number }>(`/projects?${qs}`);
-    return data.items.map(mapProjectToJob);
+    const { jobs } = await this.getJobsPage(page, limit, filters);
+    return jobs;
   },
 
   async getJobById(id: string): Promise<Job | undefined> {

@@ -16,6 +16,10 @@ export const mobileAppLinks = {
   appStore: 'https://apps.apple.com/in/app/2unee/id6761867005',
 } as const;
 
+/** WhatsApp community for project updates (Explore banner). */
+export const whatsappCommunityUrl =
+  'https://chat.whatsapp.com/D2rZg7ZAF4V6aK2xGjpjsS';
+
 /**
  * Worker web + mobile deep-link origin (must match `tune_app` `kDeepLinkHosts` and hosted
  * `.well-known` files). Used for job share URLs so iOS/Android can open the native app.
