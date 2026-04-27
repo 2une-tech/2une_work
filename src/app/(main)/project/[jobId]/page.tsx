@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowUpRight, ChevronLeft, Loader2, Sparkles } from 'lucide-react';
 
 import { JobShareButton } from '@/components/JobShareButton';
+import { MobileProjectAppHandoff } from '@/components/MobileProjectAppHandoff';
 import { ContractPaymentTermsSection } from '@/components/ContractPaymentTermsSection';
 
 import { api } from '@/lib/services/api';
@@ -145,6 +146,7 @@ export default function ProjectDetailsPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-6xl bg-background px-6 py-8 md:px-8">
+      <MobileProjectAppHandoff jobId={jobId} jobTitle={job.title} />
       <div className="mb-6 flex items-center justify-between gap-3">
         <Link
           href="/"
